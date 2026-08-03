@@ -1,3 +1,23 @@
+// PulseTrace — Phase 2: Database Foundation
+//
+// Implemented from initial-docs/architecture/database-design.md (primary) and
+// initial-docs/architecture/event-model.md (primary).
+//
+// Notes / deviations (see Phase 2 report):
+// - EventType is the union of database-design.md's enum and event-model.md's event
+//   categories (WORKER_COMPLETED, RETRY_STARTED, REPLAY_REQUESTED, REPLAY_STARTED,
+//   REPLAY_COMPLETED were missing from the database design).
+// - Channel contains only EMAIL, SMS, IN_APP; PUSH/WHATSAPP/WEBHOOK are flagged as
+//   "Future" in the design and will be added via migration when introduced.
+// - TemplateStatus was added because database-design.md defines a `status` column
+//   for Templates but no enum.
+// - ReplayExecution.newNotificationId is optional: a replay is requested before the
+//   new notification execution exists.
+// - NotificationEvent.executionId is optional: creation events precede job execution.
+// - Cascade rules follow the design: deletion of referenced records is Restricted.
+// - Column names follow event-model.md's SQL examples (camelCase); tables are mapped
+//   to the plural names used in database-design.md.
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -5,4 +25,179 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+enum NotificationStatus {
+  CREATED
+  QUEUED
+  PROCESSING
+  DELIVERED
+  FAILED
+  RETRY_PENDING
+  DLQ
+  SKIPPED
+}
+
+enum Channel {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum Category {
+  TRANSACTIONAL
+  SECURITY
+  SYSTEM
+  INFORMATIONAL
+}
+
+enum EventType {
+  NOTIFICATION_CREATED
+  REQUEST_VALIDATED
+  NOTIFICATION_STORED
+  JOB_QUEUED
+  WORKER_STARTED
+  WORKER_COMPLETED
+  PREFERENCE_CHECKED
+  TEMPLATE_RESOLVED
+  TEMPLATE_RENDERED
+  CHANNEL_SELECTED
+  PROVIDER_INVOKED
+  DELIVERY_SUCCEEDED
+  DELIVERY_FAILED
+  RETRY_SCHEDULED
+  RETRY_STARTED
+  REPLAY_CREATED
+  REPLAY_REQUESTED
+  REPLAY_STARTED
+  REPLAY_COMPLETED
+  DLQ_MOVED
+}
+
+enum TemplateStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Notification recipients.
+model User {
+  id        String   @id @default(uuid())
+  email     String?  @unique
+  phone     String?
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  notifications Notification[]
+  preferences   UserPreference[]
+
+  @@map("Users")
+}
+
+/// Reusable notification templates.
+model Template {
+  id        String         @id @default(uuid())
+  name      String
+  channel   Channel
+  subject   String?
+  body      String
+  version   Int            @default(1)
+  status    TemplateStatus @default(DRAFT)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  notifications Notification[]
+
+  @@index([name])
+  @@index([channel])
+  @@map("Templates")
+}
+
+/// Current state of one notification.
+model Notification {
+  id         String             @id @default(uuid())
+  userId     String
+  templateId String
+  channel    Channel
+  category   Category
+  priority   Priority           @default(NORMAL)
+  status     NotificationStatus @default(CREATED)
+  payload    Json               @default("{}") @db.JsonB
+  metadata   Json               @default("{}") @db.JsonB
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  template            Template             @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  events              NotificationEvent[]
+  originalOfReplays   ReplayExecution[]    @relation("OriginalNotificationReplays")
+  replayedAsNew       ReplayExecution[]    @relation("NewNotificationReplays")
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId])
+  @@map("Notifications")
+}
+
+/// Immutable, append-only state transitions.
+model NotificationEvent {
+  id             String               @id @default(uuid())
+  notificationId String
+  eventType      EventType
+  statusBefore   NotificationStatus?
+  statusAfter    NotificationStatus?
+  executionId    String?
+  metadata       Json                 @default("{}") @db.JsonB
+  occurredAt     DateTime             @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+
+  @@index([notificationId])
+  @@index([occurredAt])
+  @@index([eventType])
+  @@index([executionId])
+  @@map("NotificationEvents")
+}
+
+/// Replay operations. Original history is never modified.
+model ReplayExecution {
+  id                     String   @id @default(uuid())
+  originalNotificationId String
+  newNotificationId      String?
+  reason                 String?
+  triggeredBy            String?
+  createdAt              DateTime @default(now())
+
+  originalNotification Notification  @relation("OriginalNotificationReplays", fields: [originalNotificationId], references: [id], onDelete: Restrict)
+  newNotification      Notification? @relation("NewNotificationReplays", fields: [newNotificationId], references: [id], onDelete: Restrict)
+
+  @@index([originalNotificationId])
+  @@index([newNotificationId])
+  @@map("ReplayExecutions")
+}
+
+/// Delivery eligibility per user, channel and category.
+model UserPreference {
+  id        String   @id @default(uuid())
+  userId    String
+  channel   Channel
+  category  Category
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, channel, category])
+  @@index([channel])
+  @@index([category])
+  @@map("UserPreferences")
 }

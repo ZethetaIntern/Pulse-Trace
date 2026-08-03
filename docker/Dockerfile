@@ -10,6 +10,9 @@ RUN npm install
 
 COPY . .
 
+# schema.prisma is copied above; generate the Prisma Client before compiling.
+RUN npx prisma generate
+
 RUN npm run build
 
 EXPOSE 4000
