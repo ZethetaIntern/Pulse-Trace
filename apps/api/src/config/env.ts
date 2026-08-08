@@ -1,6 +1,12 @@
+import path from 'path';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Load the monorepo root .env as the single source of truth.
+// apps/api/.env is intentionally not used: it caused a duplicate
+// environment-variable conflict with the root .env.
+// Resolving from __dirname works in both dev (src/config via tsx) and
+// production (dist/config via node), since both are 3 levels below the root.
+dotenv.config({ path: path.resolve(__dirname, '../../..', '.env') });
 
 interface Environment {
   port: number;

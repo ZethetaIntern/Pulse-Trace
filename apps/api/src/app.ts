@@ -1,7 +1,8 @@
 import express from 'express';
 import { env } from './config/env';
-import { errorHandler } from './shared/middleware/error-handler';
 import { logger } from './infrastructure/logger';
+import { notificationRoutes } from './modules/notifications';
+import { errorHandler } from './shared/middleware/error-handler';
 
 const app = express();
 
@@ -16,6 +17,8 @@ app.get('/health', (_req, res) => {
     environment: env.nodeEnv,
   });
 });
+
+app.use('/api/v1/notifications', notificationRoutes);
 
 app.use(errorHandler);
 

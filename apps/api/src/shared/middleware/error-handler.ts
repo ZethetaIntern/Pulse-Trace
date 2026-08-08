@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 
 interface AppError extends Error {
   statusCode?: number;
+  code?: string;
+  details?: unknown[];
 }
 
 export function errorHandler(
@@ -16,6 +18,10 @@ export function errorHandler(
   res.status(statusCode).json({
     success: false,
     message,
+    error: {
+      code: err.code || 'INTERNAL_ERROR',
+      ...(err.details && err.details.length > 0 ? { details: err.details } : {}),
+    },
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 }
