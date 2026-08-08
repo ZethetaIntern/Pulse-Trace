@@ -1,4 +1,11 @@
-import { Notification, Prisma, PrismaClient, Template, User } from '@prisma/client';
+import {
+  Notification,
+  NotificationStatus,
+  Prisma,
+  PrismaClient,
+  Template,
+  User,
+} from '@prisma/client';
 import { prisma } from '../../../infrastructure/database/prisma';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
 import { ListNotificationsQuery } from '../dto/list-notifications-query';
@@ -39,6 +46,13 @@ export class PrismaNotificationRepository implements NotificationRepository {
 
   async findNotificationById(id: string): Promise<Notification | null> {
     return this.db.notification.findUnique({ where: { id } });
+  }
+
+  async updateNotificationStatus(id: string, status: NotificationStatus): Promise<Notification | null> {
+    return this.db.notification.update({
+      where: { id },
+      data: { status },
+    });
   }
 
   async listNotifications(query: ListNotificationsQuery): Promise<PaginatedNotifications> {

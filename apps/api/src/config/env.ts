@@ -14,6 +14,8 @@ interface Environment {
   databaseUrl: string;
   redisUrl: string;
   logLevel: string;
+  queueAttempts: number;
+  queueBackoffMs: number;
 }
 
 function loadEnvironment(): Environment {
@@ -22,6 +24,10 @@ function loadEnvironment(): Environment {
   const databaseUrl = process.env.DATABASE_URL || '';
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
   const logLevel = process.env.LOG_LEVEL || 'info';
+  // BullMQ retry policy for notification jobs (roadmap Phase 3: "Retry
+  // configuration"). Configurable via env, with sensible development defaults.
+  const queueAttempts = parseInt(process.env.QUEUE_ATTEMPTS || '3', 10);
+  const queueBackoffMs = parseInt(process.env.QUEUE_BACKOFF_MS || '1000', 10);
 
   return {
     port,
@@ -29,6 +35,8 @@ function loadEnvironment(): Environment {
     databaseUrl,
     redisUrl,
     logLevel,
+    queueAttempts,
+    queueBackoffMs,
   };
 }
 

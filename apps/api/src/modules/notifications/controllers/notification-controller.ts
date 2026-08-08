@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { sendSuccess } from '../../../shared/utils/response';
 import {
+  toCreateNotificationResponse,
   toNotificationResponse,
   PaginatedNotificationsResponse,
 } from '../dto/notification-response';
@@ -22,7 +23,15 @@ export class NotificationController {
     const dto = validateCreateNotification(req.body);
     const notification = await this.service.createNotification(dto);
 
-    sendSuccess(res, toNotificationResponse(notification), 'Notification created successfully', 201);
+    // Async contract (api-specification.md): the request is accepted for
+    // processing and delivery happens in the background, so respond 202 with
+    // the current status instead of a full, possibly stale, notification body.
+    sendSuccess(
+      res,
+      toCreateNotificationResponse(notification),
+      'Notification accepted for processing',
+      202,
+    );
   }
 
   async getNotification(req: Request, res: Response): Promise<void> {

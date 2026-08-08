@@ -1,20 +1,57 @@
 import { app, logger } from './app';
 import { env } from './config/env';
+import { prisma } from './infrastructure/database/prisma';
+import { notificationQueue } from './infrastructure/queue/notification-queue';
+import { NotificationWorker } from './infrastructure/queue/notification-worker';
+import { notificationService } from './modules/notifications/composition';
+
+const notificationWorker = new NotificationWorker(notificationService);
 
 const server = app.listen(env.port, () => {
   logger.info({ port: env.port }, 'Server started');
 });
 
-function shutdown() {
-  logger.info('Shutting down gracefully...');
-  server.close(() => {
-    logger.info('Server closed');
-    process.exit(0);
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+let shuttingDown = false;
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+
+  logger.info({ signal }, 'Shutting down gracefully...');
+
+  const forceExitTimer = setTimeout(() => {
+    logger.warn('Shutdown timed out; forcing exit');
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  forceExitTimer.unref();
+
+  server.close(async () => {
+    logger.info('HTTP server closed');
+
+    try {
+      await notificationWorker.close();
+      logger.info('Notification worker closed');
+
+      await notificationQueue.close();
+      logger.info('Notification queue closed');
+
+      await prisma.$disconnect();
+      logger.info('Database disconnected');
+
+      clearTimeout(forceExitTimer);
+      process.exit(0);
+    } catch (error) {
+      logger.error({ error }, 'Error during shutdown');
+      process.exit(1);
+    }
   });
 }
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason }, 'Unhandled rejection');

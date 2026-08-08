@@ -1,12 +1,11 @@
 import { Router } from 'express';
 import { asyncHandler } from '../../../shared/utils/async-handler';
+import { notificationService } from '../composition';
 import { NotificationController } from '../controllers/notification-controller';
-import { PrismaNotificationRepository } from '../repositories/prisma-notification-repository';
-import { NotificationService } from '../services/notification-service';
 
 const router = Router();
 
-const controller = new NotificationController(new NotificationService(new PrismaNotificationRepository()));
+const controller = new NotificationController(notificationService);
 
 router.post('/', asyncHandler((req, res) => controller.createNotification(req, res)));
 router.get('/', asyncHandler((req, res) => controller.listNotifications(req, res)));

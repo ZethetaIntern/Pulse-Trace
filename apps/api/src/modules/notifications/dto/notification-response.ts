@@ -34,6 +34,25 @@ export function toNotificationResponse(notification: Notification): Notification
   };
 }
 
+/**
+ * Response contract for POST /notifications (202 Accepted).
+ * Matches the asynchronous API contract in api-specification.md: the request
+ * is accepted for processing and only the id + acceptance status are returned.
+ */
+export interface CreateNotificationResponse {
+  notificationId: string;
+  status: string;
+}
+
+export function toCreateNotificationResponse(
+  notification: Notification,
+): CreateNotificationResponse {
+  return {
+    notificationId: notification.id,
+    status: notification.status,
+  };
+}
+
 export interface PaginatedNotificationsResponse {
   items: NotificationResponse[];
   pagination: {
