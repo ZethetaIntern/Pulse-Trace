@@ -5,6 +5,7 @@ import {
   toNotificationResponse,
   PaginatedNotificationsResponse,
 } from '../dto/notification-response';
+import { toTimelineResponse } from '../dto/timeline-response';
 import { NotificationService } from '../services/notification-service';
 import {
   validateCreateNotification,
@@ -56,5 +57,12 @@ export class NotificationController {
     };
 
     sendSuccess(res, data, 'Notifications retrieved successfully');
+  }
+
+  async getNotificationTimeline(req: Request, res: Response): Promise<void> {
+    const notificationId = validateNotificationId(req.params.notificationId);
+    const events = await this.service.getNotificationTimeline(notificationId);
+
+    sendSuccess(res, events.map(toTimelineResponse), 'Timeline retrieved successfully');
   }
 }

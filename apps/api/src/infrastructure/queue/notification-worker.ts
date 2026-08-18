@@ -30,6 +30,11 @@ export class NotificationWorker {
         await this.processor.processNotification(job.data.notificationId, {
           jobId: job.id,
           workerId: NOTIFICATION_WORKER_NAME,
+          // BullMQ: attemptsMade counts completed attempts, so the current run
+          // is attemptNumber = attemptsMade + 1. A retry follows this attempt iff
+          // attemptNumber < maxAttempts (BullMQ's own shouldRetryJob rule).
+          attemptNumber: job.attemptsMade + 1,
+          maxAttempts: job.opts.attempts ?? 1,
         });
       },
       {

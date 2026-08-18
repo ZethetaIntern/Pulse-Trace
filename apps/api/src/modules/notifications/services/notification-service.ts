@@ -1,4 +1,4 @@
-import { EventType, Notification, NotificationStatus } from '@prisma/client';
+import { EventType, Notification, NotificationEvent, NotificationStatus } from '@prisma/client';
 import { logger } from '../../../infrastructure/logger';
 import { HttpError } from '../../../shared/errors/http-error';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
@@ -37,6 +37,26 @@ export class NotificationService implements NotificationProcessingService {
     let currentStatus = notification.status;
 
     try {
+      // A retried attempt announces itself before WORKER_STARTED so the
+      // timeline reads DELIVERY_FAILED → RETRY_SCHEDULED → RETRY_STARTED →
+      // WORKER_STARTED. No status change here; WORKER_STARTED records the
+      // actual FAILED → PROCESSING transition.
+      if (context.attemptNumber > 1) {
+        await this.eventRepository.recordEvent({
+          notificationId: notification.id,
+          eventType: EventType.RETRY_STARTED,
+          statusBefore: notification.status,
+          statusAfter: notification.status,
+          executionId: context.jobId,
+          metadata: {
+            attempt: context.attemptNumber,
+            maxAttempts: context.maxAttempts,
+            jobId: context.jobId,
+            workerId: context.workerId,
+          },
+        });
+      }
+
       await this.repository.updateNotificationStatus(notification.id, NotificationStatus.PROCESSING);
       currentStatus = NotificationStatus.PROCESSING;
       await this.eventRepository.recordEvent({
@@ -99,8 +119,32 @@ export class NotificationService implements NotificationProcessingService {
         metadata: {
           workerId: context.workerId,
           error: error instanceof Error ? error.message : String(error),
+          attempt: context.attemptNumber,
+          maxAttempts: context.maxAttempts,
+          jobId: context.jobId,
         },
       });
+
+      // A retry follows this failed attempt only while attempts remain. This
+      // mirrors BullMQ's own shouldRetryJob rule (attemptsMade + 1 < attempts),
+      // so RETRY_SCHEDULED is never recorded when the job will actually fail
+      // permanently on this attempt.
+      if (context.attemptNumber < context.maxAttempts) {
+        await this.eventRepository.recordEvent({
+          notificationId,
+          eventType: EventType.RETRY_SCHEDULED,
+          statusBefore: NotificationStatus.FAILED,
+          statusAfter: NotificationStatus.FAILED,
+          executionId: context.jobId,
+          metadata: {
+            attempt: context.attemptNumber,
+            maxAttempts: context.maxAttempts,
+            jobId: context.jobId,
+            workerId: context.workerId,
+          },
+        });
+      }
+
       logger.error(
         { notificationId, jobId: context.jobId, workerId: context.workerId, error },
         'Worker failed to process notification; marked FAILED',
@@ -247,5 +291,22 @@ export class NotificationService implements NotificationProcessingService {
     );
 
     return result;
+  }
+
+  /**
+   * Returns the chronological event history for one notification.
+   * Events are read through the event repository abstraction; ordering is
+   * occurredAt ASC with id ASC as the deterministic tie-breaker.
+   */
+  async getNotificationTimeline(notificationId: string): Promise<NotificationEvent[]> {
+    const notification = await this.repository.findNotificationById(notificationId);
+
+    if (!notification) {
+      throw new HttpError('Notification not found', 404, 'NOT_FOUND', [
+        { field: 'notificationId', message: 'no notification exists with the given id' },
+      ]);
+    }
+
+    return this.eventRepository.listEventsByNotificationId(notificationId);
   }
 }

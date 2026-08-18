@@ -17,4 +17,10 @@ export interface RecordNotificationEventInput {
  */
 export interface NotificationEventRepository {
   recordEvent(input: RecordNotificationEventInput): Promise<NotificationEvent>;
+
+  /**
+   * Returns the complete event history for one notification in chronological
+   * order (occurredAt ASC, id ASC as deterministic tie-breaker).
+   */
+  listEventsByNotificationId(notificationId: string): Promise<NotificationEvent[]>;
 }

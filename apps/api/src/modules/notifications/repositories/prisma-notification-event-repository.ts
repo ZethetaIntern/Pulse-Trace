@@ -24,4 +24,13 @@ export class PrismaNotificationEventRepository implements NotificationEventRepos
       },
     });
   }
+
+  listEventsByNotificationId(notificationId: string): Promise<NotificationEvent[]> {
+    // Chronological order with id ASC as a deterministic tie-breaker for events
+    // sharing the same occurredAt (event-model.md: Event Ordering).
+    return this.db.notificationEvent.findMany({
+      where: { notificationId },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+    });
+  }
 }
