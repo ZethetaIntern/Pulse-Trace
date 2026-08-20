@@ -57,8 +57,12 @@ export class ApiRequestError extends Error {
 // Health
 // ============================================================
 
-export function getHealth(): Promise<HealthResponse> {
-  return request<HealthResponse>('/health');
+export async function getHealth(): Promise<HealthResponse> {
+  const res = await fetch('/health');
+  if (!res.ok) {
+    throw new ApiRequestError('HEALTH_CHECK_FAILED', res.status, `Health check failed with status ${res.status}`);
+  }
+  return res.json();
 }
 
 // ============================================================
