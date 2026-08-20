@@ -3,9 +3,15 @@ import { env } from './config/env';
 import { prisma } from './infrastructure/database/prisma';
 import { notificationQueue } from './infrastructure/queue/notification-queue';
 import { NotificationWorker } from './infrastructure/queue/notification-worker';
+import { PrismaNotificationEventRepository } from './modules/notifications/repositories/prisma-notification-event-repository';
+import { PrismaReplayExecutionRepository } from './modules/replay/repositories/prisma-replay-execution-repository';
 import { notificationService } from './modules/notifications/composition';
 
-const notificationWorker = new NotificationWorker(notificationService);
+const notificationWorker = new NotificationWorker(
+  notificationService,
+  new PrismaNotificationEventRepository(),
+  new PrismaReplayExecutionRepository(),
+);
 
 const server = app.listen(env.port, () => {
   logger.info({ port: env.port }, 'Server started');

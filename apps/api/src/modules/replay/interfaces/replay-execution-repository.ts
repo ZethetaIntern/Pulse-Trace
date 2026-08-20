@@ -15,4 +15,5 @@ export interface ReplayExecutionRepository {
   updateNewNotificationId(id: string, newNotificationId: string): Promise<ReplayExecution>;
   findById(id: string): Promise<ReplayExecution | null>;
   findByOriginalNotificationId(originalNotificationId: string): Promise<ReplayExecution[]>;
+  findReplayExecutionByNewNotificationId(newNotificationId: string): Promise<ReplayExecution | null>;
 }

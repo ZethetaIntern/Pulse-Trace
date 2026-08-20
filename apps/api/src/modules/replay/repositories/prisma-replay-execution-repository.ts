@@ -39,4 +39,10 @@ export class PrismaReplayExecutionRepository implements ReplayExecutionRepositor
       orderBy: { createdAt: 'asc' },
     });
   }
+
+  async findReplayExecutionByNewNotificationId(newNotificationId: string): Promise<ReplayExecution | null> {
+    return this.db.replayExecution.findFirst({
+      where: { newNotificationId },
+    });
+  }
 }

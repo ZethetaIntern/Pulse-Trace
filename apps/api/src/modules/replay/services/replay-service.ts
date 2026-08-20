@@ -100,7 +100,13 @@ export class ReplayService {
       NotificationStatus.QUEUED,
     );
 
-    // 7. Enqueue the new notification.
+    // 7. Link the ReplayExecution to the new notification.
+    await this.replayExecutionRepository.updateNewNotificationId(
+      replayExecution.id,
+      newNotification.id,
+    );
+
+    // 8. Enqueue the new notification.
     let jobId: string | undefined;
     try {
       jobId = await this.queue.addNotificationJob(newNotification.id);
@@ -111,11 +117,14 @@ export class ReplayService {
       throw new HttpError('Queue unavailable', 503, 'QUEUE_UNAVAILABLE');
     }
 
-    // 8. Record JOB_QUEUED on the NEW notification.
+    // 9. Record JOB_QUEUED on the NEW notification.
+    const queuedNotification = await this.notificationRepository.findNotificationById(
+      newNotification.id,
+    );
     await this.eventRepository.recordEvent({
       notificationId: newNotification.id,
       eventType: EventType.JOB_QUEUED,
-      statusBefore: NotificationStatus.CREATED,
+      statusBefore: queuedNotification?.status ?? NotificationStatus.QUEUED,
       statusAfter: NotificationStatus.QUEUED,
       executionId: jobId,
     });
