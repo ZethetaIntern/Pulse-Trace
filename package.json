@@ -7,7 +7,9 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=apps/api",
+    "dev:dashboard": "npm run dev --workspace=apps/dashboard",
     "build": "npm run build --workspace=apps/api",
+    "build:dashboard": "npm run build --workspace=apps/dashboard",
     "start": "npm run start --workspace=apps/api",
     "lint": "eslint \"apps/*/src/**/*.ts\"",
     "format": "prettier --write 'apps/*/src/**/*.ts'",
