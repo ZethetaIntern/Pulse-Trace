@@ -13,7 +13,9 @@
     "start": "npm run start --workspace=apps/api",
     "lint": "eslint \"apps/*/src/**/*.ts\"",
     "format": "prettier --write 'apps/*/src/**/*.ts'",
-    "format:check": "prettier --check 'apps/*/src/**/*.ts'"
+    "format:check": "prettier --check 'apps/*/src/**/*.ts'",
+    "test:api": "npm run test --workspace=apps/api",
+    "test:api:watch": "npm run test:watch --workspace=apps/api"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.18.0",
