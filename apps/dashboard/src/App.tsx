@@ -3,6 +3,7 @@ import { AppLayout } from './layouts/AppLayout';
 import { OverviewPage } from './pages/OverviewPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { NotificationDetailPage } from './pages/NotificationDetailPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
         <Route index element={<OverviewPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="notifications/:notificationId" element={<NotificationDetailPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
       </Route>
     </Routes>
   );

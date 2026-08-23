@@ -125,3 +125,51 @@ export interface ListNotificationsParams {
   sort?: SortField;
   order?: SortOrder;
 }
+
+// ============================================================
+// Analytics
+// ============================================================
+
+export interface DashboardMetricsResponse {
+  totalNotifications: number;
+  successRate: number;
+  failureRate: number;
+  retryCount: number;
+  dlqCount: number;
+  channelBreakdown: Record<string, number>;
+}
+
+export interface TrendBucketResponse {
+  date: string;
+  created: number;
+  delivered: number;
+  failed: number;
+  retried: number;
+}
+
+export interface DeliveryTrendsResponse {
+  interval: string;
+  from: string;
+  to: string;
+  buckets: TrendBucketResponse[];
+}
+
+export interface ChannelStatResponse {
+  channel: string;
+  total: number;
+  delivered: number;
+  failed: number;
+  successRate: number;
+}
+
+export interface ChannelStatisticsResponse {
+  channels: ChannelStatResponse[];
+}
+
+export type TrendInterval = 'hour' | 'day' | 'week' | 'month';
+
+export interface TrendQueryParams {
+  from?: string;
+  to?: string;
+  interval?: TrendInterval;
+}

@@ -1,5 +1,8 @@
 import type {
   ApiResponse,
+  ChannelStatisticsResponse,
+  DashboardMetricsResponse,
+  DeliveryTrendsResponse,
   HealthResponse,
   ListNotificationsParams,
   NotificationResponse,
@@ -7,6 +10,7 @@ import type {
   ReplayExecutionResponse,
   ReplayNotificationResponse,
   TimelineEventResponse,
+  TrendQueryParams,
 } from '../types';
 
 const BASE_URL = '/api/v1';
@@ -113,4 +117,29 @@ export function replayNotification(
 
 export function getReplayHistory(id: string): Promise<ReplayExecutionResponse[]> {
   return request<ReplayExecutionResponse[]>(`${BASE_URL}/notifications/${id}/replays`);
+}
+
+// ============================================================
+// Analytics
+// ============================================================
+
+export function getDashboardMetrics(): Promise<DashboardMetricsResponse> {
+  return request<DashboardMetricsResponse>(`${BASE_URL}/analytics/dashboard`);
+}
+
+export function getDeliveryTrends(params?: TrendQueryParams): Promise<DeliveryTrendsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null && value !== '') {
+        searchParams.set(key, String(value));
+      }
+    }
+  }
+  const qs = searchParams.toString();
+  return request<DeliveryTrendsResponse>(`${BASE_URL}/analytics/trends${qs ? `?${qs}` : ''}`);
+}
+
+export function getChannelStatistics(): Promise<ChannelStatisticsResponse> {
+  return request<ChannelStatisticsResponse>(`${BASE_URL}/analytics/channels`);
 }
