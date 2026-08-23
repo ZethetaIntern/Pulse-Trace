@@ -1,0 +1,976 @@
+openapi: 3.0.3
+info:
+  title: PulseTrace API
+  description: |
+    Notification lifecycle management API for PulseTrace.
+
+    This API manages the complete lifecycle of notifications: creation,
+    async processing, event timeline tracking, replay, and analytics.
+
+    All endpoints return a consistent JSON envelope. Delivery of
+    notifications is asynchronous — POST requests return 202 Accepted
+    and the notification is processed in the background by a worker.
+  version: 1.0.0
+  contact:
+    name: PulseTrace Team
+
+servers:
+  - url: http://localhost:4000
+    description: Local development server
+
+tags:
+  - name: Health
+    description: System health check
+  - name: Notifications
+    description: Create, retrieve, and list notifications
+  - name: Timeline
+    description: Notification event timeline
+  - name: Replay
+    description: Replay previously processed notifications
+  - name: Analytics
+    description: Dashboard metrics, delivery trends, and channel statistics
+
+# ============================================================
+# Paths
+# ============================================================
+paths:
+  # ----------------------------------------------------------
+  # Health
+  # ----------------------------------------------------------
+  /health:
+    get:
+      operationId: getHealth
+      tags: [Health]
+      summary: System health check
+      description: Returns server status, uptime, and environment info.
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  # ----------------------------------------------------------
+  # Notifications
+  # ----------------------------------------------------------
+  /api/v1/notifications:
+    post:
+      operationId: createNotification
+      tags: [Notifications]
+      summary: Create a notification
+      description: |
+        Accepts a new notification for async processing. The notification is
+        persisted to the database, enqueued in Redis/BullMQ, and processed by
+        a background worker. Returns immediately with 202 Accepted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNotificationRequest'
+            examples:
+              email_notification:
+                summary: Email notification
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440000"
+                  templateId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                  channel: EMAIL
+                  category: TRANSACTIONAL
+                  priority: NORMAL
+                  variables:
+                    name: "Alice"
+              sms_notification:
+                summary: SMS notification
+                value:
+                  userId: "550e8400-e29b-41d4-a716-446655440000"
+                  templateId: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                  channel: SMS
+                  category: SECURITY
+                  priority: HIGH
+                  variables:
+                    code: "123456"
+      responses:
+        '202':
+          description: Notification accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateNotificationResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                missing_fields:
+                  summary: Missing required fields
+                  value:
+                    success: false
+                    message: Validation failed
+                    error:
+                      code: INVALID_REQUEST
+                      details:
+                        - field: userId
+                          message: "must be a valid UUID"
+                        - field: channel
+                          message: "is required"
+                user_not_found:
+                  summary: User not found
+                  value:
+                    success: false
+                    message: "User not found"
+                    error:
+                      code: USER_NOT_FOUND
+                      details:
+                        - field: userId
+                          message: "no user exists with the given id"
+                template_not_found:
+                  summary: Template not found
+                  value:
+                    success: false
+                    message: "Template not found"
+                    error:
+                      code: TEMPLATE_NOT_FOUND
+                      details:
+                        - field: templateId
+                          message: "no template exists with the given id"
+                channel_mismatch:
+                  summary: Channel/template mismatch
+                  value:
+                    success: false
+                    message: "Template channel mismatch"
+                    error:
+                      code: TEMPLATE_CHANNEL_MISMATCH
+                      details:
+                        - field: channel
+                          message: "template is configured for SMS, but the request specifies EMAIL"
+        '503':
+          description: Queue unavailable (Redis down)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                queue_unavailable:
+                  summary: Queue unavailable
+                  value:
+                    success: false
+                    message: "Queue unavailable"
+                    error:
+                      code: QUEUE_UNAVAILABLE
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      operationId: listNotifications
+      tags: [Notifications]
+      summary: List notifications
+      description: |
+        Returns a paginated list of notifications with optional filtering and sorting.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Page number (1-based)
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Items per page
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/NotificationStatus'
+          description: Filter by notification status
+        - name: channel
+          in: query
+          schema:
+            $ref: '#/components/schemas/Channel'
+          description: Filter by channel
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/Category'
+          description: Filter by category
+        - name: priority
+          in: query
+          schema:
+            $ref: '#/components/schemas/Priority'
+          description: Filter by priority
+        - name: userId
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by user ID
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, status, priority, channel]
+            default: createdAt
+          description: Sort field
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order
+      responses:
+        '200':
+          description: Paginated notifications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/{notificationId}:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Notification UUID
+
+    get:
+      operationId: getNotification
+      tags: [Notifications]
+      summary: Get a notification
+      description: Returns the full notification record.
+      responses:
+        '200':
+          description: Notification retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationDetailResponse'
+        '400':
+          description: Invalid UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: "Notification not found"
+                error:
+                  code: NOT_FOUND
+                  details:
+                    - field: notificationId
+                      message: "no notification exists with the given id"
+
+  /api/v1/notifications/{notificationId}/timeline:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Notification UUID
+
+    get:
+      operationId: getNotificationTimeline
+      tags: [Timeline]
+      summary: Get notification timeline
+      description: |
+        Returns the chronological event history for a notification.
+        Events are ordered by occurredAt ASC.
+      responses:
+        '200':
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimelineResponse'
+        '400':
+          description: Invalid UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/{notificationId}/replay:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Notification UUID
+
+    post:
+      operationId: replayNotification
+      tags: [Replay]
+      summary: Replay a notification
+      description: |
+        Creates a new notification by copying the original, links them via
+        a ReplayExecution record, and enqueues the new notification for
+        processing. The original notification and its timeline are never
+        modified.
+
+        Only notifications with status DELIVERED, FAILED, DLQ, or SKIPPED
+        can be replayed. Notifications still in progress (CREATED, QUEUED,
+        PROCESSING) are rejected with REPLAY_NOT_ALLOWED.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplayRequest'
+            examples:
+              with_reason:
+                summary: Replay with reason
+                value:
+                  reason: "Provider recovered"
+              without_reason:
+                summary: Replay without reason
+                value: {}
+      responses:
+        '202':
+          description: Replay started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayNotificationResponse'
+        '400':
+          description: Validation error or notification not replayable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_uuid:
+                  summary: Invalid notification ID
+                  value:
+                    success: false
+                    message: "Validation failed"
+                    error:
+                      code: INVALID_REQUEST
+                      details:
+                        - field: notificationId
+                          message: "must be a valid UUID"
+                not_replayable:
+                  summary: Notification not in replayable state
+                  value:
+                    success: false
+                    message: "Notification is not in a replable state"
+                    error:
+                      code: REPLAY_NOT_ALLOWED
+                      details:
+                        - field: status
+                          message: "cannot replay a notification with status QUEUED"
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/notifications/{notificationId}/replays:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+        description: Notification UUID
+
+    get:
+      operationId: getReplayHistory
+      tags: [Replay]
+      summary: Get replay history
+      description: Returns all replay executions for a given notification.
+      responses:
+        '200':
+          description: Replay history
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplayHistoryResponse'
+        '400':
+          description: Invalid UUID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Notification not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # Analytics
+  # ----------------------------------------------------------
+  /api/v1/analytics/dashboard:
+    get:
+      operationId: getDashboardMetrics
+      tags: [Analytics]
+      summary: Dashboard metrics
+      description: |
+        Returns aggregate notification metrics: total count, success/failure
+        rates, retry count, DLQ count, and per-channel breakdown.
+      responses:
+        '200':
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardMetricsResponse'
+
+  /api/v1/analytics/trends:
+    get:
+      operationId: getDeliveryTrends
+      tags: [Analytics]
+      summary: Delivery trends
+      description: |
+        Returns time-bucketed delivery trends using PostgreSQL date_trunc.
+        Buckets show created, delivered, failed, and retried counts per interval.
+
+        If from/to are omitted, defaults to the last 30 days.
+        If interval is omitted, defaults to "day".
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: Start of date range (ISO 8601). Default: 30 days ago.
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+          description: End of date range (ISO 8601). Default: now.
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, week, month]
+            default: day
+          description: Bucket interval
+      responses:
+        '200':
+          description: Delivery trends
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeliveryTrendsResponse'
+        '400':
+          description: Validation error (invalid interval, from >= to)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalid_interval:
+                  summary: Invalid interval
+                  value:
+                    success: false
+                    message: "Validation failed"
+                    error:
+                      code: INVALID_REQUEST
+                      details:
+                        - field: interval
+                          message: "must be one of: hour, day, week, month"
+
+  /api/v1/analytics/channels:
+    get:
+      operationId: getChannelStatistics
+      tags: [Analytics]
+      summary: Channel statistics
+      description: Returns per-channel statistics: total, delivered, failed, and success rate.
+      responses:
+        '200':
+          description: Channel statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChannelStatisticsResponse'
+
+# ============================================================
+# Components
+# ============================================================
+components:
+  # ----------------------------------------------------------
+  # Schemas
+  # ----------------------------------------------------------
+  schemas:
+    # -- Enums --
+    Channel:
+      type: string
+      enum: [EMAIL, SMS, IN_APP]
+
+    Category:
+      type: string
+      enum: [TRANSACTIONAL, SECURITY, SYSTEM, INFORMATIONAL]
+
+    Priority:
+      type: string
+      enum: [LOW, NORMAL, HIGH, CRITICAL]
+
+    NotificationStatus:
+      type: string
+      enum: [CREATED, QUEUED, PROCESSING, DELIVERED, FAILED, RETRY_PENDING, DLQ, SKIPPED]
+
+    # -- Health --
+    HealthResponse:
+      type: object
+      required: [status, timestamp, uptime, version, environment]
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-08-23T12:00:00.000Z"
+        uptime:
+          type: number
+          example: 3600.5
+        version:
+          type: string
+          example: "1.0.0"
+        environment:
+          type: string
+          example: development
+
+    # -- Notification Request --
+    CreateNotificationRequest:
+      type: object
+      required: [userId, templateId, channel, category]
+      properties:
+        userId:
+          type: string
+          format: uuid
+          description: Recipient user ID
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        templateId:
+          type: string
+          format: uuid
+          description: Template ID (must match the specified channel)
+          example: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+        channel:
+          $ref: '#/components/schemas/Channel'
+        category:
+          $ref: '#/components/schemas/Category'
+        priority:
+          $ref: '#/components/schemas/Priority'
+          default: NORMAL
+        variables:
+          type: object
+          additionalProperties: true
+          description: Template variables (JSON-serializable values)
+          example:
+            name: "Alice"
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Arbitrary metadata attached to the notification
+
+    # -- Notification Responses --
+    CreateNotificationResponse:
+      type: object
+      description: Response for POST /api/v1/notifications (202 Accepted)
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Notification accepted for processing"
+        data:
+          type: object
+          required: [notificationId, status]
+          properties:
+            notificationId:
+              type: string
+              format: uuid
+              example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+            status:
+              type: string
+              example: QUEUED
+
+    NotificationResponse:
+      type: object
+      required: [id, userId, templateId, channel, category, priority, status, payload, metadata, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        templateId:
+          type: string
+          format: uuid
+        channel:
+          type: string
+        category:
+          type: string
+        priority:
+          type: string
+        status:
+          type: string
+        payload:
+          type: object
+          description: Template variables stored as JSONB
+        metadata:
+          type: object
+          description: Arbitrary metadata stored as JSONB
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NotificationDetailResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          $ref: '#/components/schemas/NotificationResponse'
+
+    PaginatedNotificationsResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+          required: [items, pagination]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/NotificationResponse'
+            pagination:
+              type: object
+              required: [page, limit, total, totalPages]
+              properties:
+                page:
+                  type: integer
+                  example: 1
+                limit:
+                  type: integer
+                  example: 20
+                total:
+                  type: integer
+                  example: 150
+                totalPages:
+                  type: integer
+                  example: 8
+
+    # -- Timeline --
+    TimelineEventResponse:
+      type: object
+      required: [event, timestamp, metadata]
+      properties:
+        event:
+          type: string
+          description: Event type
+          example: NOTIFICATION_CREATED
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-08-23T12:00:00.000Z"
+        metadata:
+          type: object
+          description: Event metadata
+
+    TimelineResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEventResponse'
+
+    # -- Replay --
+    ReplayRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Optional reason for the replay
+          example: "Provider recovered"
+
+    ReplayNotificationResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Replay started"
+        data:
+          type: object
+          required: [replayId, notificationId]
+          properties:
+            replayId:
+              type: string
+              format: uuid
+              example: "a3f1b2c4-d5e6-7890-abcd-ef1234567890"
+            notificationId:
+              type: string
+              format: uuid
+              example: "b4c2e3f5-a6d7-8901-bcde-f12345678901"
+
+    ReplayExecutionResponse:
+      type: object
+      required: [replayId, originalNotificationId, createdAt]
+      properties:
+        replayId:
+          type: string
+          format: uuid
+        originalNotificationId:
+          type: string
+          format: uuid
+        newNotificationId:
+          type: string
+          format: uuid
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        triggeredBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        newNotificationStatus:
+          type: string
+          nullable: true
+
+    ReplayHistoryResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReplayExecutionResponse'
+
+    # -- Analytics --
+    DashboardMetricsResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+          required: [totalNotifications, successRate, failureRate, retryCount, dlqCount, channelBreakdown]
+          properties:
+            totalNotifications:
+              type: integer
+              example: 1200
+            successRate:
+              type: number
+              format: float
+              description: Percentage (e.g., 70.0 = 70%)
+              example: 98.3
+            failureRate:
+              type: number
+              format: float
+              description: Percentage (e.g., 30.0 = 30%)
+              example: 1.7
+            retryCount:
+              type: integer
+              example: 23
+            dlqCount:
+              type: integer
+              example: 4
+            channelBreakdown:
+              type: object
+              additionalProperties:
+                type: integer
+              example:
+                EMAIL: 980
+                SMS: 220
+
+    DeliveryTrendsResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+          required: [interval, from, to, buckets]
+          properties:
+            interval:
+              type: string
+              example: day
+            from:
+              type: string
+              format: date-time
+            to:
+              type: string
+              format: date-time
+            buckets:
+              type: array
+              items:
+                $ref: '#/components/schemas/TrendBucket'
+
+    TrendBucket:
+      type: object
+      required: [date, created, delivered, failed, retried]
+      properties:
+        date:
+          type: string
+          format: date-time
+          description: Bucket start time (truncated by interval)
+        created:
+          type: integer
+          description: Notifications created in this bucket
+        delivered:
+          type: integer
+          description: Notifications delivered in this bucket
+        failed:
+          type: integer
+          description: Notifications failed (FAILED + DLQ) in this bucket
+        retried:
+          type: integer
+          description: Retry events in this bucket
+
+    ChannelStatisticsResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+          required: [channels]
+          properties:
+            channels:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChannelStat'
+
+    ChannelStat:
+      type: object
+      required: [channel, total, delivered, failed, successRate]
+      properties:
+        channel:
+          type: string
+          example: EMAIL
+        total:
+          type: integer
+          example: 980
+        delivered:
+          type: integer
+          example: 960
+        failed:
+          type: integer
+          example: 20
+        successRate:
+          type: number
+          format: float
+          description: Percentage
+          example: 98.0
+
+    # -- Error --
+    ErrorResponse:
+      type: object
+      required: [success, message, error]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Validation failed"
+        error:
+          type: object
+          required: [code]
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: INVALID_REQUEST
+            details:
+              type: array
+              description: Optional field-level validation details
+              items:
+                type: object
+                properties:
+                  field:
+                    type: string
+                  message:
+                    type: string
+        stack:
+          type: string
+          description: Stack trace (development mode only)
