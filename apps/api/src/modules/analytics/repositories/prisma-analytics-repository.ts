@@ -117,30 +117,29 @@ export class PrismaAnalyticsRepository implements AnalyticsRepository {
   }
 
   async getChannelStatistics(): Promise<ChannelStat[]> {
-    const rows = await this.db.notification.groupBy({
-      by: ['channel'],
-      _count: { id: true },
-    });
+    // Single aggregation query replacing the previous N+1 pattern
+    // (1 groupBy + 2 count queries per channel = 1 + 2n queries).
+    // Uses PostgreSQL FILTER (WHERE ...) for conditional counts —
+    // same technique already used in getDeliveryTrends().
+    const rows = await this.db.$queryRaw<
+      Array<{ channel: string; total: number; delivered: number; failed: number }>
+    >`
+      SELECT
+        n."channel",
+        COUNT(*)::int                                                   AS total,
+        COUNT(*) FILTER (WHERE n."status" = 'DELIVERED')::int           AS delivered,
+        COUNT(*) FILTER (WHERE n."status" IN ('FAILED', 'DLQ'))::int    AS failed
+      FROM "Notifications" n
+      GROUP BY n."channel"
+      ORDER BY n."channel" ASC
+    `;
 
-    const results: ChannelStat[] = [];
-
-    for (const row of rows) {
-      const channel = row.channel;
-      const total = row._count.id;
-
-      const delivered = await this.db.notification.count({
-        where: { channel, status: 'DELIVERED' },
-      });
-
-      const failed = await this.db.notification.count({
-        where: { channel, status: { in: ['FAILED', 'DLQ'] } },
-      });
-
-      const successRate = total > 0 ? Math.round((delivered / total) * 1000) / 10 : 0;
-
-      results.push({ channel, total, delivered, failed, successRate });
-    }
-
-    return results;
+    return rows.map((row) => ({
+      channel: row.channel,
+      total: row.total,
+      delivered: row.delivered,
+      failed: row.failed,
+      successRate: row.total > 0 ? Math.round((row.delivered / row.total) * 1000) / 10 : 0,
+    }));
   }
 }

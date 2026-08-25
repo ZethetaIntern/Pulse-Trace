@@ -1,6 +1,6 @@
-import { useHealth, useNotifications } from '../hooks/useNotifications';
+import { useHealth } from '../hooks/useNotifications';
+import { useDashboardMetrics } from '../hooks/useAnalytics';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import type { NotificationStatus } from '../types';
 
 function HealthCard() {
   const { data: health, isLoading, isError, error, refetch } = useHealth();
@@ -62,33 +62,58 @@ function HealthCard() {
 }
 
 function SummaryCards() {
-  const { data: allData } = useNotifications({ limit: 100 });
-  const items = allData?.items ?? [];
+  const { data: metrics, isLoading, isError, error, refetch } = useDashboardMetrics();
 
-  const counts: Record<string, number> = {};
-  for (const item of items) {
-    counts[item.status] = (counts[item.status] || 0) + 1;
+  if (isLoading) {
+    return (
+      <div className="rounded-lg border border-gray-200 bg-white p-5">
+        <LoadingSpinner message="Loading summary..." />
+      </div>
+    );
   }
 
-  const cards: { label: string; count: number; status: NotificationStatus | null }[] = [
-    { label: 'Fetched', count: items.length, status: null },
-    { label: 'Delivered', count: counts['DELIVERED'] ?? 0, status: 'DELIVERED' },
-    { label: 'Failed', count: counts['FAILED'] ?? 0, status: 'FAILED' },
-    { label: 'Queued', count: counts['QUEUED'] ?? 0, status: 'QUEUED' },
-    { label: 'Processing', count: counts['PROCESSING'] ?? 0, status: 'PROCESSING' },
-    { label: 'In DLQ', count: counts['DLQ'] ?? 0, status: 'DLQ' },
+  if (isError || !metrics) {
+    return (
+      <div className="rounded-lg border border-red-200 bg-white p-5">
+        <div className="flex items-center gap-3">
+          <span className="h-3 w-3 rounded-full bg-red-500" />
+          <span className="text-sm font-medium text-red-700">Failed to load summary</span>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          {error instanceof Error ? error.message : 'Could not load dashboard metrics'}
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="mt-3 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const cards = [
+    { label: 'Total', value: metrics.totalNotifications },
+    { label: 'Success Rate', value: `${metrics.successRate}%` },
+    { label: 'Failure Rate', value: `${metrics.failureRate}%` },
+    { label: 'Retries', value: metrics.retryCount },
+    { label: 'In DLQ', value: metrics.dlqCount },
+    {
+      label: 'Channels',
+      value: Object.keys(metrics.channelBreakdown).length,
+    },
   ];
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5">
       <h3 className="mb-3 text-sm font-medium text-gray-900">Notification Summary</h3>
       <p className="mb-4 text-xs text-gray-400">
-        Counts below are derived from the current page of the notification list API (up to 100 items). These are <strong>not</strong> global database totals.
+        Global metrics from the analytics endpoint.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {cards.map((card) => (
           <div key={card.label} className="rounded-md bg-gray-50 p-3">
-            <div className="text-2xl font-semibold text-gray-900">{card.count}</div>
+            <div className="text-2xl font-semibold text-gray-900">{card.value}</div>
             <div className="mt-1 text-xs text-gray-500">{card.label}</div>
           </div>
         ))}
