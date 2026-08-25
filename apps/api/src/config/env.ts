@@ -16,6 +16,7 @@ interface Environment {
   logLevel: string;
   queueAttempts: number;
   queueBackoffMs: number;
+  corsOrigins: string[];
 }
 
 function loadEnvironment(): Environment {
@@ -29,6 +30,14 @@ function loadEnvironment(): Environment {
   const queueAttempts = parseInt(process.env.QUEUE_ATTEMPTS || '3', 10);
   const queueBackoffMs = parseInt(process.env.QUEUE_BACKOFF_MS || '1000', 10);
 
+  // CORS origins: comma-separated list. In development, defaults to '*' if not set.
+  // In production, must be explicitly configured.
+  const corsOriginsRaw = process.env.CORS_ORIGINS || '';
+  const corsOrigins = corsOriginsRaw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+
   return {
     port,
     nodeEnv,
@@ -37,6 +46,7 @@ function loadEnvironment(): Environment {
     logLevel,
     queueAttempts,
     queueBackoffMs,
+    corsOrigins,
   };
 }
 

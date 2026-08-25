@@ -9,18 +9,32 @@ import { errorHandler } from './shared/middleware/error-handler';
 
 const app = express();
 
-app.use((_req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  if (_req.method === 'OPTIONS') {
-    res.sendStatus(204);
+app.use((req, res, next) => {
+  const isDev = env.nodeEnv !== 'production';
+  const allowedOrigins = env.corsOrigins.length > 0 ? env.corsOrigins : isDev ? ['*'] : [];
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes('*') || (origin && allowedOrigins.includes(origin))) {
+    res.header('Access-Control-Allow-Origin', origin || '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+  } else if (!isDev) {
+    // In production, reject requests from unconfigured origins
+    res.status(403).json({
+      success: false,
+      message: 'CORS: Origin not allowed',
+      error: { code: 'CORS_ORIGIN_NOT_ALLOWED' },
+    });
     return;
   }
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
 app.get('/health', (_req, res) => {
   res.json({
