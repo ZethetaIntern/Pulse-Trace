@@ -7,4 +7,5 @@ export interface MonitoringRepository {
   checkWorker(): Promise<{ status: 'ok' | 'error' | 'stopped'; latencyMs: number }>;
   getQueueMetrics(): Promise<QueueMetrics>;
   getWorkerMetrics(): Promise<WorkerMetrics>;
+  close(): Promise<void>;
 }

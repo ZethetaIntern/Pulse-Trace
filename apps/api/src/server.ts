@@ -6,6 +6,7 @@ import { NotificationWorker } from './infrastructure/queue/notification-worker';
 import { PrismaNotificationEventRepository } from './modules/notifications/repositories/prisma-notification-event-repository';
 import { PrismaReplayExecutionRepository } from './modules/replay/repositories/prisma-replay-execution-repository';
 import { notificationService } from './modules/notifications/composition';
+import { monitoringRepository } from './modules/monitoring/composition';
 
 const notificationWorker = new NotificationWorker(
   notificationService,
@@ -37,22 +38,46 @@ async function shutdown(signal: string): Promise<void> {
   server.close(async () => {
     logger.info('HTTP server closed');
 
+    let shutdownError: Error | null = null;
+
     try {
       await notificationWorker.close();
       logger.info('Notification worker closed');
+    } catch (error) {
+      shutdownError = error as Error;
+      logger.error({ error }, 'Error closing notification worker');
+    }
 
+    try {
       await notificationQueue.close();
       logger.info('Notification queue closed');
+    } catch (error) {
+      shutdownError = error as Error;
+      logger.error({ error }, 'Error closing notification queue');
+    }
 
+    try {
+      await monitoringRepository.close();
+      logger.info('Monitoring repository closed');
+    } catch (error) {
+      shutdownError = error as Error;
+      logger.error({ error }, 'Error closing monitoring repository');
+    }
+
+    try {
       await prisma.$disconnect();
       logger.info('Database disconnected');
-
-      clearTimeout(forceExitTimer);
-      process.exit(0);
     } catch (error) {
-      logger.error({ error }, 'Error during shutdown');
+      shutdownError = error as Error;
+      logger.error({ error }, 'Error disconnecting database');
+    }
+
+    clearTimeout(forceExitTimer);
+
+    if (shutdownError) {
       process.exit(1);
     }
+    process.exit(0);
   });
 }
 
@@ -67,3 +92,5 @@ process.on('uncaughtException', (error) => {
   logger.error({ error }, 'Uncaught exception');
   process.exit(1);
 });
+
+export { shutdown };

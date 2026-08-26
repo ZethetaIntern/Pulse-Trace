@@ -6,3 +6,4 @@ import { MonitoringService } from './interfaces/monitoring-service';
 const monitoringRepository: MonitoringRepository = new BullMQMonitoringRepository();
 
 export const monitoringService: MonitoringService = new MonitoringServiceImpl(monitoringRepository);
+export { monitoringRepository };

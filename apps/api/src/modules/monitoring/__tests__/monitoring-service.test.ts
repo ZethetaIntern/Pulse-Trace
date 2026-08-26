@@ -36,6 +36,7 @@ const createMockRepository = (overrides: Partial<{
         },
       ],
     }),
+    close: jest.fn().mockResolvedValue(undefined),
   };
   return mock;
 };
