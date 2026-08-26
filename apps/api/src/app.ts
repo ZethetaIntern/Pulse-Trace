@@ -5,6 +5,7 @@ import { logger } from './infrastructure/logger';
 import { analyticsRoutes } from './modules/analytics';
 import { monitoringRoutes } from './modules/monitoring';
 import { notificationRoutes } from './modules/notifications';
+import { readinessRoutes } from './modules/readiness';
 import { replayRoutes } from './modules/replay';
 import { errorHandler } from './shared/middleware/error-handler';
 
@@ -51,6 +52,7 @@ app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/notifications', replayRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/monitoring', monitoringRoutes);
+app.use('/health', readinessRoutes);
 
 // Swagger UI — available in development and test environments only.
 if (env.nodeEnv !== 'production') {

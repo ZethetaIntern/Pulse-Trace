@@ -7,6 +7,7 @@ import { PrismaNotificationEventRepository } from './modules/notifications/repos
 import { PrismaReplayExecutionRepository } from './modules/replay/repositories/prisma-replay-execution-repository';
 import { notificationService } from './modules/notifications/composition';
 import { monitoringRepository } from './modules/monitoring/composition';
+import { isShuttingDown, setShuttingDown } from './lifecycle/shutdown-state';
 
 const notificationWorker = new NotificationWorker(
   notificationService,
@@ -19,13 +20,12 @@ const server = app.listen(env.port, () => {
 });
 
 const SHUTDOWN_TIMEOUT_MS = 10_000;
-let shuttingDown = false;
 
 async function shutdown(signal: string): Promise<void> {
-  if (shuttingDown) {
+  if (isShuttingDown()) {
     return;
   }
-  shuttingDown = true;
+  setShuttingDown(true);
 
   logger.info({ signal }, 'Shutting down gracefully...');
 

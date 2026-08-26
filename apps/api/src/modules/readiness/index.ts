@@ -1,0 +1,1 @@
+export { readinessRoutes } from './routes/readiness-routes';
