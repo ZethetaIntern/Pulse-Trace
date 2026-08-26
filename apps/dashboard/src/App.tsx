@@ -4,6 +4,7 @@ import { OverviewPage } from './pages/OverviewPage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { NotificationDetailPage } from './pages/NotificationDetailPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { MonitoringPage } from './pages/MonitoringPage';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="notifications/:notificationId" element={<NotificationDetailPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="monitoring" element={<MonitoringPage />} />
       </Route>
     </Routes>
   );

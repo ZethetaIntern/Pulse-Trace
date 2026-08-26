@@ -5,12 +5,15 @@ import type {
   DeliveryTrendsResponse,
   HealthResponse,
   ListNotificationsParams,
+  MonitoringHealthResponse,
   NotificationResponse,
   PaginatedNotificationsResponse,
+  QueueMetricsResponse,
   ReplayExecutionResponse,
   ReplayNotificationResponse,
   TimelineEventResponse,
   TrendQueryParams,
+  WorkerMetricsResponse,
 } from '../types';
 
 const BASE_URL = '/api/v1';
@@ -142,4 +145,20 @@ export function getDeliveryTrends(params?: TrendQueryParams): Promise<DeliveryTr
 
 export function getChannelStatistics(): Promise<ChannelStatisticsResponse> {
   return request<ChannelStatisticsResponse>(`${BASE_URL}/analytics/channels`);
+}
+
+// ============================================================
+// Monitoring
+// ============================================================
+
+export function getMonitoringHealth(): Promise<MonitoringHealthResponse> {
+  return request<MonitoringHealthResponse>(`${BASE_URL}/monitoring/health`);
+}
+
+export function getQueueMetrics(): Promise<QueueMetricsResponse> {
+  return request<QueueMetricsResponse>(`${BASE_URL}/monitoring/queues`);
+}
+
+export function getWorkerMetrics(): Promise<WorkerMetricsResponse> {
+  return request<WorkerMetricsResponse>(`${BASE_URL}/monitoring/workers`);
 }

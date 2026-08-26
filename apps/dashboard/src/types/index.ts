@@ -173,3 +173,64 @@ export interface TrendQueryParams {
   to?: string;
   interval?: TrendInterval;
 }
+
+// ============================================================
+// Monitoring
+// ============================================================
+
+export interface MonitoringHealthCheck {
+  status: string;
+  latencyMs?: number;
+}
+
+export interface MonitoringHealthResponse {
+  status: string;
+  timestamp: string;
+  uptime: number;
+  version: string;
+  environment: string;
+  checks: {
+    api: MonitoringHealthCheck;
+    postgres: MonitoringHealthCheck;
+    redis: MonitoringHealthCheck;
+    queue: MonitoringHealthCheck;
+    worker: MonitoringHealthCheck;
+  };
+}
+
+export interface QueueCountsResponse {
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+}
+
+export interface QueueMetricsResponse {
+  queueName: string;
+  isPaused: boolean;
+  counts: QueueCountsResponse;
+}
+
+export interface WorkerQueueCountsResponse {
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+}
+
+export interface WorkerMetricsItemResponse {
+  id: string;
+  name: string;
+  status: string;
+  concurrency: number;
+  isRunning: boolean;
+  queueCounts: WorkerQueueCountsResponse;
+  processUptimeSeconds: number;
+  processedTotal: number;
+  failedTotal: number;
+}
+
+export interface WorkerMetricsResponse {
+  workers: WorkerMetricsItemResponse[];
+}

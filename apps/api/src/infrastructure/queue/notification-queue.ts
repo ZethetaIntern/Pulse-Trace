@@ -6,6 +6,7 @@ import { connection } from './bullmq';
 
 export const NOTIFICATION_QUEUE_NAME = 'notifications';
 export const NOTIFICATION_JOB_NAME = 'process-notification';
+export const NOTIFICATION_WORKER_NAME = 'notification-worker';
 
 /** Lightweight payload moved through the queue. The worker loads the rest of the data from the database. */
 export interface NotificationJobData {

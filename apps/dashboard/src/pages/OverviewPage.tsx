@@ -122,27 +122,6 @@ function SummaryCards() {
   );
 }
 
-function MonitoringNotice() {
-  return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-      <div className="flex items-start gap-3">
-        <svg className="mt-0.5 h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-        </svg>
-        <div>
-          <p className="text-sm font-medium text-amber-800">
-            Detailed queue and worker monitoring is not yet available.
-          </p>
-          <p className="mt-1 text-xs text-amber-600">
-            The documented /monitoring/health, /monitoring/queues, and /monitoring/workers
-            endpoints have not been implemented yet. This section will be expanded in a future phase.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${Math.floor(seconds)}s`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.floor(seconds % 60)}s`;
@@ -164,7 +143,6 @@ export function OverviewPage() {
         <HealthCard />
         <SummaryCards />
       </div>
-      <MonitoringNotice />
     </div>
   );
 }
