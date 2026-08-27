@@ -10,7 +10,7 @@ function createMockResponse(): Response {
 }
 
 describe('errorHandler', () => {
-  const mockReq = {} as Request;
+  const mockReq = { requestId: 'test-req-id-123', method: 'GET', originalUrl: '/test' } as unknown as Request;
   const mockNext = jest.fn();
 
   beforeEach(() => {
@@ -80,6 +80,27 @@ describe('errorHandler', () => {
 
     const callArgs = (res.json as jest.Mock).mock.calls[0][0];
     expect(callArgs.error).not.toHaveProperty('details');
+  });
+
+  it('includes requestId in error response', () => {
+    const res = createMockResponse();
+    const error = new Error('Something broke');
+
+    errorHandler(error, mockReq, res, mockNext);
+
+    const callArgs = (res.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.error.requestId).toBe('test-req-id-123');
+  });
+
+  it('includes requestId when requestId is undefined (graceful degradation)', () => {
+    const reqWithoutId = { method: 'GET', originalUrl: '/test' } as unknown as Request;
+    const res = createMockResponse();
+    const error = new Error('Something broke');
+
+    errorHandler(error, reqWithoutId, res, mockNext);
+
+    const callArgs = (res.json as jest.Mock).mock.calls[0][0];
+    expect(callArgs.error.requestId).toBeUndefined();
   });
 
   it('includes stack trace in development mode', () => {
