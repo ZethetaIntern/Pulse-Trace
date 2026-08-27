@@ -8,6 +8,7 @@ import { notificationRoutes } from './modules/notifications';
 import { readinessRoutes } from './modules/readiness';
 import { replayRoutes } from './modules/replay';
 import { errorHandler } from './shared/middleware/error-handler';
+import { requestIdMiddleware } from './shared/middleware/request-id';
 
 const app = express();
 
@@ -37,6 +38,9 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '100kb' }));
+
+// Request correlation — must run after JSON parser, before any routes.
+app.use(requestIdMiddleware);
 
 app.get('/health', (_req, res) => {
   res.json({

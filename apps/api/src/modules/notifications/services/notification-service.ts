@@ -189,7 +189,17 @@ export class NotificationService implements NotificationProcessingService {
     }
   }
 
-  async createNotification(dto: CreateNotificationDto): Promise<Notification> {
+  /**
+   * Creates a notification, records initial lifecycle events, and enqueues
+   * a background processing job.
+   *
+   * When `requestId` is provided (typically from the originating HTTP
+   * request), it is included in the metadata of creation-lifecycle events
+   * only.  Worker/retry/replay events execute asynchronously and may run
+   * long after the HTTP request has completed, so they intentionally do
+   * NOT carry the originating requestId to avoid misleading correlations.
+   */
+  async createNotification(dto: CreateNotificationDto, requestId?: string): Promise<Notification> {
     const user = await this.repository.findUserById(dto.userId);
     if (!user) {
       throw new HttpError('User not found', 400, 'USER_NOT_FOUND', [
@@ -216,7 +226,7 @@ export class NotificationService implements NotificationProcessingService {
     const notification = await this.repository.createNotification(dto);
 
     logger.info(
-      { notificationId: notification.id, channel: notification.channel, category: notification.category },
+      { notificationId: notification.id, channel: notification.channel, category: notification.category, requestId },
       'Notification created',
     );
 
@@ -224,18 +234,21 @@ export class NotificationService implements NotificationProcessingService {
       notificationId: notification.id,
       eventType: EventType.NOTIFICATION_CREATED,
       statusAfter: NotificationStatus.CREATED,
+      ...(requestId ? { metadata: { requestId } } : {}),
     });
     await this.eventRepository.recordEvent({
       notificationId: notification.id,
       eventType: EventType.REQUEST_VALIDATED,
       statusBefore: NotificationStatus.CREATED,
       statusAfter: NotificationStatus.CREATED,
+      ...(requestId ? { metadata: { requestId } } : {}),
     });
     await this.eventRepository.recordEvent({
       notificationId: notification.id,
       eventType: EventType.NOTIFICATION_STORED,
       statusBefore: NotificationStatus.CREATED,
       statusAfter: NotificationStatus.CREATED,
+      ...(requestId ? { metadata: { requestId } } : {}),
     });
 
     // Persist QUEUED before the job is enqueued. This guarantees a fast worker
@@ -264,6 +277,7 @@ export class NotificationService implements NotificationProcessingService {
       statusBefore: NotificationStatus.CREATED,
       statusAfter: NotificationStatus.QUEUED,
       executionId: jobId,
+      ...(requestId ? { metadata: { requestId } } : {}),
     });
 
     // Return the accepted (QUEUED) state so the API response is never stale.

@@ -22,7 +22,7 @@ export class NotificationController {
 
   async createNotification(req: Request, res: Response): Promise<void> {
     const dto = validateCreateNotification(req.body);
-    const notification = await this.service.createNotification(dto);
+    const notification = await this.service.createNotification(dto, req.requestId);
 
     // Async contract (api-specification.md): the request is accepted for
     // processing and delivery happens in the background, so respond 202 with

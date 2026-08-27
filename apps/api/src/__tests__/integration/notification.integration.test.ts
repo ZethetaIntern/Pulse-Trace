@@ -55,6 +55,7 @@ describe('POST /api/v1/notifications', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data).toHaveProperty('notificationId');
     expect(res.body.data.status).toBe('QUEUED');
+    expect(res.headers['x-request-id']).toBeDefined();
   });
 
   it('should return 400 for missing required fields', async () => {
@@ -65,6 +66,7 @@ describe('POST /api/v1/notifications', () => {
 
     expect(res.body.success).toBe(false);
     expect(res.body.error.code).toBe('INVALID_REQUEST');
+    expect(res.headers['x-request-id']).toBeDefined();
   });
 
   it('should return 400 for invalid channel', async () => {
@@ -202,6 +204,7 @@ describe('GET /api/v1/notifications/:notificationId', () => {
 
     expect(res.body.success).toBe(false);
     expect(res.body.error.code).toBe('NOT_FOUND');
+    expect(res.headers['x-request-id']).toBeDefined();
   });
 
   it('should return 400 for invalid UUID', async () => {
@@ -338,5 +341,27 @@ describe('GET /health', () => {
     expect(res.body).toHaveProperty('timestamp');
     expect(res.body).toHaveProperty('uptime');
     expect(res.body.version).toBe('1.0.0');
+  });
+
+  it('should return X-Request-ID header', async () => {
+    const res = await request(app).get('/health').expect(200);
+    expect(res.headers['x-request-id']).toBeDefined();
+    expect(typeof res.headers['x-request-id']).toBe('string');
+    expect(res.headers['x-request-id'].length).toBeGreaterThan(0);
+  });
+
+  it('should preserve supplied X-Request-ID', async () => {
+    const customId = 'my-e2e-correlation-id';
+    const res = await request(app)
+      .get('/health')
+      .set('X-Request-ID', customId)
+      .expect(200);
+
+    expect(res.headers['x-request-id']).toBe(customId);
+  });
+
+  it('should return X-Request-ID on 404', async () => {
+    const res = await request(app).get('/nonexistent').expect(404);
+    expect(res.headers['x-request-id']).toBeDefined();
   });
 });
