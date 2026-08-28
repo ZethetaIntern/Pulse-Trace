@@ -5,14 +5,16 @@ interface EmptyStateProps {
   title?: string;
   icon?: ReactNode;
   action?: ReactNode;
+  /** Compact presentation for tight spaces (smaller icon/padding). */
+  compact?: boolean;
 }
 
-export function EmptyState({ message, title, icon, action }: EmptyStateProps) {
+export function EmptyState({ message, title, icon, action, compact = false }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+    <div className={`flex flex-col items-center justify-center px-4 text-center ${compact ? 'py-8' : 'py-16'}`}>
       {icon ?? (
         <svg
-          className="mb-3 h-10 w-10 text-ink-faint"
+          className={`text-ink-faint ${compact ? 'mb-2 h-6 w-6' : 'mb-3 h-10 w-10'}`}
           fill="none"
           viewBox="0 0 24 24"
           strokeWidth={1.5}
@@ -27,7 +29,7 @@ export function EmptyState({ message, title, icon, action }: EmptyStateProps) {
         </svg>
       )}
       {title && <h3 className="text-section-title text-ink">{title}</h3>}
-      <p className="mt-1 max-w-sm text-description text-ink-muted">{message}</p>
+      <p className={`max-w-sm text-description text-ink-muted ${compact ? 'mt-0.5' : 'mt-1'}`}>{message}</p>
       {action && <div className="mt-4">{action}</div>}
     </div>
   );

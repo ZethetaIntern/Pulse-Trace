@@ -3,6 +3,7 @@ interface MetricCardProps {
   value: string | number;
   subtitle?: string;
   variant?: 'default' | 'success' | 'danger' | 'warning';
+  compact?: boolean;
 }
 
 const VARIANT_STYLES: Record<string, string> = {
@@ -19,12 +20,12 @@ const VALUE_STYLES: Record<string, string> = {
   warning: 'text-warning-text',
 };
 
-export function MetricCard({ label, value, subtitle, variant = 'default' }: MetricCardProps) {
+export function MetricCard({ label, value, subtitle, variant = 'default', compact = false }: MetricCardProps) {
   return (
-    <div className={`rounded-card border p-5 ${VARIANT_STYLES[variant]}`}>
-      <div className="text-sm font-medium text-ink-muted">{label}</div>
-      <div className={`mt-2 text-kpi ${VALUE_STYLES[variant]}`}>{value}</div>
-      {subtitle && <div className="mt-1 text-xs text-ink-faint">{subtitle}</div>}
+    <div className={`rounded-card border ${compact ? 'p-4' : 'p-5'} ${VARIANT_STYLES[variant]}`}>
+      <div className={`font-medium text-ink-muted ${compact ? 'text-xs' : 'text-sm'}`}>{label}</div>
+      <div className={`text-kpi ${compact ? 'mt-1' : 'mt-2'} ${VALUE_STYLES[variant]}`}>{value}</div>
+      {subtitle && <div className={`text-xs text-ink-faint ${compact ? 'mt-0.5' : 'mt-1'}`}>{subtitle}</div>}
     </div>
   );
 }

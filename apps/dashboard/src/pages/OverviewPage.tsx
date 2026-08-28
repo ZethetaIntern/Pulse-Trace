@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -148,36 +147,36 @@ function HealthBanner({ health }: { health: HealthQuery }) {
 // KPI grid
 // ============================================================
 
-function CompactStat({
+function StatCell({
   label,
   value,
   valueClass = 'text-ink',
 }: {
   label: string;
-  value: ReactNode;
+  value: string | number;
   valueClass?: string;
 }) {
   return (
-    <div className="rounded-card border border-line bg-surface px-4 py-3">
+    <div className="bg-surface px-4 py-2.5">
       <div className="text-meta text-ink-muted">{label}</div>
-      <div className={`mt-0.5 text-lg font-semibold ${valueClass}`}>{value}</div>
+      <div className={`mt-0.5 text-base font-semibold ${valueClass}`}>{value}</div>
     </div>
   );
 }
 
 function KpiSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-card border border-line bg-surface p-5">
+          <div key={i} className="rounded-card border border-line bg-surface p-4">
             <LoadingSkeleton rows={2} />
           </div>
         ))}
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-card border border-line bg-surface px-4 py-3">
+          <div key={i} className="bg-surface px-4 py-2.5">
             <LoadingSkeleton rows={1} />
           </div>
         ))}
@@ -208,36 +207,41 @@ function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
   const channelCount = Object.keys(m.channelBreakdown).length;
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
+          compact
           label="Total Notifications"
           value={m.totalNotifications}
-          subtitle={channelCount > 0 ? `across ${channelCount} channels` : 'across 0 channels'}
+          subtitle={`Across ${channelCount} ${channelCount === 1 ? 'channel' : 'channels'}`}
         />
         <MetricCard
+          compact
           label="Success Rate"
           value={empty ? '—' : `${m.successRate}%`}
           variant={empty || m.successRate === 0 ? 'default' : 'success'}
+          subtitle={empty ? 'No deliveries yet' : undefined}
         />
         <MetricCard
+          compact
           label="Failure Rate"
           value={empty ? '—' : `${m.failureRate}%`}
           variant={empty || m.failureRate === 0 ? 'default' : 'danger'}
+          subtitle={empty ? 'No deliveries yet' : undefined}
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <CompactStat
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3">
+        <StatCell
           label="Retries"
           value={m.retryCount}
           valueClass={m.retryCount > 0 ? 'text-warning-text' : 'text-ink'}
         />
-        <CompactStat
+        <StatCell
           label="In DLQ"
           value={m.dlqCount}
           valueClass={m.dlqCount > 0 ? 'text-error-text' : 'text-ink'}
         />
-        <CompactStat label="Channels" value={channelCount} />
+        <StatCell label="Channels" value={channelCount} />
       </div>
     </div>
   );
@@ -272,28 +276,28 @@ function DeliveryOverview({ channels, queue }: { channels: ChannelsQuery; queue:
         </div>
       )}
       {missing && !bothFailed && (
-        <div className="py-6">
+        <div className="py-4">
           <LoadingSkeleton rows={4} />
         </div>
       )}
       {!missing && (
         <>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <CompactStat
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line">
+            <StatCell
               label="Delivered"
               value={delivered ?? '—'}
               valueClass={delivered && delivered > 0 ? 'text-success-text' : 'text-ink'}
             />
-            <CompactStat
+            <StatCell
               label="Failed"
               value={failed ?? '—'}
               valueClass={failed && failed > 0 ? 'text-error-text' : 'text-ink'}
             />
-            <CompactStat label="Queued" value={queued ?? '—'} />
-            <CompactStat label="Processing" value={processing ?? '—'} />
+            <StatCell label="Queued" value={queued ?? '—'} />
+            <StatCell label="Processing" value={processing ?? '—'} />
           </div>
           {someFailed && (
-            <div className="mt-3 flex items-center justify-between text-meta text-ink-faint">
+            <div className="mt-2 flex items-center justify-between text-meta text-ink-faint">
               <span>Some metrics are temporarily unavailable.</span>
               <Button
                 variant="secondary"
@@ -318,7 +322,7 @@ function HealthRow({ label, check }: { label: string; check: { status: string; l
   const tone = resolveStatusTone(classified);
 
   return (
-    <div className="flex items-center justify-between border-b border-line py-2 last:border-0">
+    <div className="flex items-center justify-between border-b border-line py-1.5 last:border-0">
       <div className="flex items-center gap-2">
         <StatusDot status={classified} />
         <span className="text-sm font-medium text-ink">{label}</span>
@@ -386,6 +390,7 @@ function RecentActivity({ notifications, now }: { notifications: NotificationsQu
         !notifications.isError &&
         notifications.data?.items.length === 0 && (
           <EmptyState
+            compact
             title="No notification activity yet"
             message="Notifications will appear here once the system processes them."
           />
@@ -431,7 +436,7 @@ export function OverviewPage() {
   const updatedLabel = lastUpdated > 0 ? `Updated ${formatRelativeTime(lastUpdated, now)}` : null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         title="Overview"
         description="System health and notification delivery at a glance."
