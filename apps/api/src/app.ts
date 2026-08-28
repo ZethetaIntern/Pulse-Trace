@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import path from 'path';
 import { env } from './config/env';
 import { logger } from './infrastructure/logger';
@@ -11,6 +12,19 @@ import { errorHandler } from './shared/middleware/error-handler';
 import { requestIdMiddleware } from './shared/middleware/request-id';
 
 const app = express();
+
+// Security headers via Helmet.  Tuned for a JSON API that is consumed by a
+// separate dashboard origin:
+//  - crossOriginEmbedderPolicy disabled (breaks cross-origin fetch from dashboard)
+//  - crossOriginResourcePolicy set to 'cross-origin' (same reason)
+//  - contentSecurityPolicy disabled (API returns JSON, not HTML)
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: false,
+  }),
+);
 
 app.use((req, res, next) => {
   const isDev = env.nodeEnv !== 'production';

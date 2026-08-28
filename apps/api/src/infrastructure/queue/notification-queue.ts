@@ -37,8 +37,11 @@ export class NotificationQueue implements QueueService {
       NOTIFICATION_JOB_NAME,
       { notificationId },
       {
-        removeOnComplete: false,
-        removeOnFail: false,
+        // Retention TTLs prevent unbounded Redis memory growth.
+        // Completed jobs are kept for 1 day; failed jobs for 7 days to
+        // allow debugging and replay inspection.
+        removeOnComplete: { age: 86_400 },
+        removeOnFail: { age: 604_800 },
         // Configurable retry policy: attempts with exponential backoff.
         // A dedicated DLQ belongs to the reliability/replay milestone and is
         // intentionally not built here (see roadmap Phase 3 tasks).

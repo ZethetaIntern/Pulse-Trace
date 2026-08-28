@@ -136,6 +136,8 @@ The full OpenAPI 3.0.3 spec is at [`apps/api/docs/openapi.yaml`](apps/api/docs/o
 | Timeline | `/api/v1/notifications/:id/timeline` | Immutable event history for a notification |
 | Replay | `/api/v1/notifications/:id/replay` | Re-execute a notification; view replay history |
 | Analytics | `/api/v1/analytics` | Dashboard metrics, delivery trends, channel statistics |
+| Monitoring | `/api/v1/monitoring` | System health, queue metrics, worker metrics |
+| Readiness | `/health/ready` | Readiness probe (503 when dependencies are down) |
 | Health | `/health` | API status, uptime, version |
 
 ## Dashboard
@@ -148,6 +150,7 @@ The React dashboard runs at **http://localhost:5173** and proxies API requests t
 - **Notifications** (`/notifications`) — Filterable, sortable, paginated notification table.
 - **Notification Detail** (`/notifications/:id`) — Full details, event timeline, replay trigger, and replay history.
 - **Analytics** (`/analytics`) — Metric cards, delivery trend charts, and channel breakdown.
+- **Monitoring** (`/monitoring`) — System health, queue metrics, and worker metrics.
 
 <!-- Screenshot: Dashboard Overview -->
 
@@ -163,9 +166,9 @@ The test suite covers unit, integration, and end-to-end layers:
 
 | Layer | Count | Framework | Command |
 |-------|-------|-----------|---------|
-| Unit tests | 150 | Jest | `npm run test:api` |
+| Unit tests | 209 | Jest | `npm run test:api` |
 | Integration tests | 40 | Jest + Supertest | `npm run test:integration` |
-| E2E tests | 9 | Playwright | `npm run test:e2e` |
+| E2E tests | 15 | Playwright | `npm run test:e2e` |
 
 **Integration tests** require Docker services (PostgreSQL + Redis) to be running.
 
@@ -199,14 +202,16 @@ apps/
 │   ├── docs/
 │   │   └── openapi.yaml              # OpenAPI 3.0.3 spec
 │   └── src/
-│       ├── app.ts                    # Express setup, CORS, routes
+│       ├── app.ts                    # Express setup, CORS, Helmet, routes
 │       ├── server.ts                 # Entry point, worker init, graceful shutdown
 │       ├── config/                   # Environment variables
 │       ├── infrastructure/           # Prisma client, BullMQ queue/worker, logger
 │       ├── modules/
 │       │   ├── notifications/        # CRUD, processing, timeline
 │       │   ├── replay/               # Replay system
-│       │   └── analytics/            # Dashboard metrics, trends, channels
+│       │   ├── analytics/            # Dashboard metrics, trends, channels
+│       │   ├── monitoring/           # System health, queue/worker metrics
+│       │   └── readiness/            # Readiness probe
 │       └── shared/                   # Error handling, middleware, utilities
 └── dashboard/                        # React monitoring dashboard
     └── src/
@@ -237,7 +242,7 @@ PulseTrace is a **portfolio/educational project** in active development.
 - Replay system with audit trail
 - Analytics: dashboard metrics, delivery trends, per-channel statistics
 - React dashboard with filtering, sorting, pagination, timeline, replay, and analytics views
-- 150 unit tests, 40 integration tests, 9 E2E tests
+- 209 unit tests, 40 integration tests, 15 E2E tests
 - OpenAPI 3.0.3 spec with Swagger UI
 - Docker Compose for local development
 
@@ -245,7 +250,6 @@ PulseTrace is a **portfolio/educational project** in active development.
 - Real email/SMS/in-app provider integrations (delivery is simulated)
 - Authentication or authorization
 - Production deployment configuration (CI/CD, Kubernetes)
-- Queue/worker monitoring endpoints (`/monitoring/*`)
 
 ## Roadmap
 
@@ -253,7 +257,6 @@ PulseTrace is a **portfolio/educational project** in active development.
 - Authentication and authorization
 - CI/CD pipeline
 - Deeper E2E test coverage
-- Queue and worker monitoring endpoints
 - OpenTelemetry instrumentation
 - Multi-provider delivery routing
 - Rate limiting and throttling
