@@ -52,11 +52,30 @@ export class BullMQMonitoringRepository implements MonitoringRepository {
     }
   }
 
+  /** Timeout (ms) for readiness probes that depend on Redis.
+   *  Keeps the HTTP request bounded even when Redis is completely
+   *  unreachable (DNS failure, firewall, etc.).  This does NOT affect
+   *  the production queue/worker connections. */
+  private static readonly REDIS_CHECK_TIMEOUT_MS = 3_000;
+
+  /** Run `fn` with a hard timeout.  Rejects with a timeout error if
+   *  the operation does not complete within `ms` milliseconds. */
+  private static withTimeout<T>(fn: () => Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Readiness check timed out')), ms);
+      }),
+    ]);
+  }
+
   async checkRedis(): Promise<{ status: 'ok' | 'error'; latencyMs: number }> {
     const start = Date.now();
     try {
-      const client = await this.queue.client;
-      await (client as unknown as { ping(): Promise<string> }).ping();
+      await BullMQMonitoringRepository.withTimeout(async () => {
+        const client = await this.queue.client;
+        await (client as unknown as { ping(): Promise<string> }).ping();
+      }, BullMQMonitoringRepository.REDIS_CHECK_TIMEOUT_MS);
       return { status: 'ok', latencyMs: Date.now() - start };
     } catch {
       return { status: 'error', latencyMs: Date.now() - start };
@@ -66,7 +85,10 @@ export class BullMQMonitoringRepository implements MonitoringRepository {
   async checkQueue(): Promise<{ status: 'ok' | 'error' | 'paused'; latencyMs: number }> {
     const start = Date.now();
     try {
-      const isPaused = await this.queue.isPaused();
+      const isPaused = await BullMQMonitoringRepository.withTimeout(
+        () => this.queue.isPaused(),
+        BullMQMonitoringRepository.REDIS_CHECK_TIMEOUT_MS,
+      );
       return { status: isPaused ? 'paused' : 'ok', latencyMs: Date.now() - start };
     } catch {
       return { status: 'error', latencyMs: Date.now() - start };

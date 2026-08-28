@@ -1,0 +1,132 @@
+# =============================================================================
+# PulseTrace — Production Docker Compose
+# =============================================================================
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml down
+#
+# Architecture:
+#   nginx (port 80) → api (port 4000) → postgres + redis
+#
+# The API container runs both the HTTP server and the BullMQ notification
+# worker in a single process. This is a documented limitation: separating
+# them would require refactoring server.ts to support independent startup
+# modes. For current scale, co-location is acceptable.
+#
+# First deploy:   RUN_MIGRATIONS=true docker compose -f docker-compose.prod.yml up -d
+# Subsequent:     docker compose -f docker-compose.prod.yml up -d
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — Primary data store
+  # ---------------------------------------------------------------------------
+  # Port is NOT published to the host. Only accessible via Docker internal
+  # networking (other services connect as "postgres:5432").
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pulsetrace}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pulsetrace}
+      POSTGRES_DB: ${POSTGRES_DB:-pulsetrace}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-pulsetrace} -d ${POSTGRES_DB:-pulsetrace}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # No ports: — not exposed to host
+
+  # ---------------------------------------------------------------------------
+  # Redis — BullMQ job queue backend
+  # ---------------------------------------------------------------------------
+  # Port is NOT published to the host. Only accessible via Docker internal
+  # networking (other services connect as "redis:6379").
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    # No ports: — not exposed to host
+
+  # ---------------------------------------------------------------------------
+  # API — Express HTTP server + BullMQ notification worker
+  # ---------------------------------------------------------------------------
+  # Runs the combined API server and worker in a single Node.js process.
+  # Both /health (liveness) and /health/ready (readiness) are available,
+  # but Docker uses /health for the container healthcheck to avoid startup
+  # dependency cycles (the container would be marked unhealthy before
+  # Postgres/Redis are ready).
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: api
+    image: pulsetrace-api:latest
+    environment:
+      NODE_ENV: production
+      PORT: '4000'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-pulsetrace}:${POSTGRES_PASSWORD:-pulsetrace}@postgres:5432/${POSTGRES_DB:-pulsetrace}
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      QUEUE_ATTEMPTS: ${QUEUE_ATTEMPTS:-5}
+      QUEUE_BACKOFF_MS: ${QUEUE_BACKOFF_MS:-2000}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-false}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      ANALYTICS_MAX_RANGE_DAYS: ${ANALYTICS_MAX_RANGE_DAYS:-365}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://localhost:4000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    # No ports: — internal only, accessed via nginx
+
+  # ---------------------------------------------------------------------------
+  # Nginx — Public entry point, SPA server + API reverse proxy
+  # ---------------------------------------------------------------------------
+  # Uses a separate Docker image (built with --target nginx) which contains
+  # the compiled dashboard assets and nginx. Nginx serves the SPA and
+  # proxies /api/* requests to the API container.
+  nginx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: nginx
+    image: pulsetrace-nginx:latest
+    ports:
+      - '${NGINX_PORT:-80}:80'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--no-verbose', '--tries=1', '--spider', 'http://127.0.0.1:80/']
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+# Named volumes for data persistence
+# ---------------------------------------------------------------------------
+volumes:
+  postgres_data:
+  redis_data:

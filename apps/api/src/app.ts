@@ -9,6 +9,7 @@ import { notificationRoutes } from './modules/notifications';
 import { readinessRoutes } from './modules/readiness';
 import { replayRoutes } from './modules/replay';
 import { errorHandler } from './shared/middleware/error-handler';
+import { apiRateLimiter } from './shared/middleware/rate-limit';
 import { requestIdMiddleware } from './shared/middleware/request-id';
 
 const app = express();
@@ -39,8 +40,10 @@ app.use((req, res, next) => {
       res.sendStatus(204);
       return;
     }
-  } else if (!isDev) {
-    // In production, reject requests from unconfigured origins
+  } else if (!isDev && origin) {
+    // In production, reject cross-origin requests from unconfigured origins.
+    // Requests without an Origin header (healthchecks, curl, non-browser
+    // clients) are allowed through — CORS is a browser-only mechanism.
     res.status(403).json({
       success: false,
       message: 'CORS: Origin not allowed',
@@ -66,8 +69,17 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.use('/api/v1/notifications', notificationRoutes);
-app.use('/api/v1/notifications', replayRoutes);
+// Rate-limit only POST endpoints on notifications and replay.
+// GET endpoints (listing, timeline, replay history) are read-only and
+// do not need rate-limiting for an MVP.  Health endpoints (/health,
+// /health/ready) are registered above and below this block and are
+// never rate-limited.
+const postOnlyRateLimit: express.RequestHandler = (req, res, next) => {
+  if (req.method === 'POST') return apiRateLimiter(req, res, next);
+  next();
+};
+app.use('/api/v1/notifications', postOnlyRateLimit, notificationRoutes);
+app.use('/api/v1/notifications', postOnlyRateLimit, replayRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/monitoring', monitoringRoutes);
 app.use('/health', readinessRoutes);

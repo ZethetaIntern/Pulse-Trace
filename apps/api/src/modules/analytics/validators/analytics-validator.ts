@@ -1,4 +1,5 @@
 import { HttpError } from '../../../shared/errors/http-error';
+import { env } from '../../../config/env';
 import { TrendQuery } from '../interfaces/analytics-repository';
 
 const VALID_INTERVALS: readonly TrendQuery['interval'][] = [
@@ -54,6 +55,16 @@ export function validateTrendsQuery(query: unknown): TrendQuery {
   // Validate from < to
   if (from.getTime() >= to.getTime()) {
     details.push({ field: 'from', message: 'must be before "to"' });
+  }
+
+  // Enforce maximum date range to prevent expensive unbounded queries.
+  const rangeMs = to.getTime() - from.getTime();
+  const maxRangeMs = env.analyticsMaxRangeDays * 24 * 60 * 60 * 1000;
+  if (rangeMs > maxRangeMs) {
+    details.push({
+      field: 'from',
+      message: `date range must not exceed ${env.analyticsMaxRangeDays} days`,
+    });
   }
 
   // Validate interval

@@ -86,6 +86,26 @@ describe('BullMQMonitoringRepository', () => {
       expect(result.status).toBe('error');
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     });
+
+    it('returns error when client acquisition hangs (timeout)', async () => {
+      // Simulate a promise that never resolves — ioredis hanging on DNS/connection
+      mockClientPromise = new Promise(() => {});
+
+      const result = await repo.checkRedis();
+      expect(result.status).toBe('error');
+      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns error when ping hangs (timeout)', async () => {
+      // Client resolves, but ping never returns
+      mockClientPromise = Promise.resolve({
+        ping: jest.fn(() => new Promise(() => {})),
+      });
+
+      const result = await repo.checkRedis();
+      expect(result.status).toBe('error');
+      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    });
   });
 
   describe('checkQueue', () => {
@@ -107,6 +127,14 @@ describe('BullMQMonitoringRepository', () => {
 
     it('returns error when check fails', async () => {
       mockQueueObj.isPaused.mockRejectedValueOnce(new Error('Queue error'));
+
+      const result = await repo.checkQueue();
+      expect(result.status).toBe('error');
+      expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns error when isPaused hangs (timeout)', async () => {
+      mockQueueObj.isPaused.mockReturnValueOnce(new Promise(() => {}));
 
       const result = await repo.checkQueue();
       expect(result.status).toBe('error');

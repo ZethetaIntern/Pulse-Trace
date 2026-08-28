@@ -87,4 +87,42 @@ describe('validateTrendsQuery', () => {
     expect(result.from).toBeInstanceOf(Date);
     expect(result.to).toBeInstanceOf(Date);
   });
+
+  // ─── Date-range limit tests ───────────────────────────────────────────
+
+  it('accepts a date range within the maximum limit (365 days)', () => {
+    const from = '2026-01-01T00:00:00.000Z';
+    const to = '2026-06-01T00:00:00.000Z'; // ~151 days
+    const result = validateTrendsQuery({ from, to });
+    expect(result.from.toISOString()).toBe(from);
+    expect(result.to.toISOString()).toBe(to);
+  });
+
+  it('rejects a date range exceeding the maximum limit (365 days)', () => {
+    const from = '2024-01-01T00:00:00.000Z';
+    const to = '2026-01-02T00:00:00.000Z'; // > 365 days
+    expect(() => validateTrendsQuery({ from, to })).toThrow(HttpError);
+    try {
+      validateTrendsQuery({ from, to });
+    } catch (error) {
+      const httpError = error as HttpError;
+      expect(httpError.statusCode).toBe(400);
+      expect(httpError.details.some((d) =>
+        (d as { field: string; message: string }).message.includes('must not exceed'),
+      )).toBe(true);
+    }
+  });
+
+  it('accepts a range exactly at the default 365-day boundary minus one day', () => {
+    // 364 days should be fine
+    const now = new Date('2026-08-28T00:00:00.000Z');
+    const from = new Date(now);
+    from.setDate(from.getDate() - 364);
+    const result = validateTrendsQuery({
+      from: from.toISOString(),
+      to: now.toISOString(),
+    });
+    expect(result.from).toBeInstanceOf(Date);
+    expect(result.to).toBeInstanceOf(Date);
+  });
 });

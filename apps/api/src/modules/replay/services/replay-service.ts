@@ -4,6 +4,7 @@ import { HttpError } from '../../../shared/errors/http-error';
 import { NotificationEventRepository } from '../../notifications/interfaces/notification-event-repository';
 import { NotificationRepository } from '../../notifications/interfaces/notification-repository';
 import { QueueService } from '../../notifications/interfaces/queue-service';
+import { sanitizeErrorMessage } from '../../../shared/utils/sanitize-error';
 import { ReplayNotificationDto } from '../dto/replay-notification.dto';
 import { ReplayNotificationResponse } from '../dto/replay-response';
 import { ReplayExecutionRepository } from '../interfaces/replay-execution-repository';
@@ -171,7 +172,7 @@ export class ReplayService {
         statusAfter: NotificationStatus.FAILED,
         metadata: {
           stage: 'enqueue',
-          error: error instanceof Error ? error.message : String(error),
+          error: sanitizeErrorMessage(error),
           replayId,
           originalNotificationId,
         },

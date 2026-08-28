@@ -1,0 +1,59 @@
+# Dependencies (reinstalled inside Docker)
+node_modules
+**/node_modules
+
+# Build output (rebuilt inside Docker)
+dist
+**/dist
+
+# Version control
+.git
+.gitignore
+
+# Environment (injected via docker-compose environment)
+.env
+.env.production
+.env.local
+.env.*.local
+
+# Tests and test artifacts
+test-results
+coverage
+**/__tests__
+**/*.test.ts
+**/*.test.js
+**/*.spec.ts
+**/*.spec.js
+apps/dashboard/playwright.config.ts
+apps/api/jest.config.js
+apps/api/jest.integration.config.js
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Documentation (not needed at runtime)
+initial-docs
+README.md
+
+# Dev-only config
+.eslintrc.json
+.prettierrc
+
+# Docker compose files (not needed in build context)
+docker-compose.yml
+docker-compose.prod.yml

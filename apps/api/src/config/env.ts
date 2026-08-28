@@ -17,6 +17,9 @@ interface Environment {
   queueAttempts: number;
   queueBackoffMs: number;
   corsOrigins: string[];
+  rateLimitWindowMs: number;
+  rateLimitMax: number;
+  analyticsMaxRangeDays: number;
 }
 
 function loadEnvironment(): Environment {
@@ -38,6 +41,14 @@ function loadEnvironment(): Environment {
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
+  // Rate limiting: configurable per-window request cap.
+  // Dev defaults are generous enough not to interfere with tests.
+  const rateLimitWindowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
+  const rateLimitMax = parseInt(process.env.RATE_LIMIT_MAX || '100', 10);
+
+  // Analytics: maximum allowed date range in days to prevent expensive queries.
+  const analyticsMaxRangeDays = parseInt(process.env.ANALYTICS_MAX_RANGE_DAYS || '365', 10);
+
   return {
     port,
     nodeEnv,
@@ -47,6 +58,9 @@ function loadEnvironment(): Environment {
     queueAttempts,
     queueBackoffMs,
     corsOrigins,
+    rateLimitWindowMs,
+    rateLimitMax,
+    analyticsMaxRangeDays,
   };
 }
 

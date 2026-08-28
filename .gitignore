@@ -1,6 +1,9 @@
 node_modules/
 dist/
 .env
+.env.production
+.env.local
+.env.*.local
 *.log
 .DS_Store
 *.tsbuildinfo

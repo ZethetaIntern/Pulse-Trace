@@ -10,6 +10,7 @@ import {
 } from '../interfaces/notification-processing-service';
 import { NotificationRepository, PaginatedNotifications } from '../interfaces/notification-repository';
 import { QueueService } from '../interfaces/queue-service';
+import { sanitizeErrorMessage } from '../../../shared/utils/sanitize-error';
 
 /**
  * Application/business logic for notifications.
@@ -118,7 +119,7 @@ export class NotificationService implements NotificationProcessingService {
         executionId: context.jobId,
         metadata: {
           workerId: context.workerId,
-          error: error instanceof Error ? error.message : String(error),
+          error: sanitizeErrorMessage(error),
           attempt: context.attemptNumber,
           maxAttempts: context.maxAttempts,
           jobId: context.jobId,
@@ -174,7 +175,7 @@ export class NotificationService implements NotificationProcessingService {
         statusAfter: NotificationStatus.FAILED,
         metadata: {
           stage: 'enqueue',
-          error: error instanceof Error ? error.message : String(error),
+          error: sanitizeErrorMessage(error),
         },
       });
       logger.error(
