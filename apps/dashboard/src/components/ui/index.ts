@@ -13,5 +13,8 @@ export {
   isInfrastructureStatus,
   resolveStatusTone,
   formatStatusLabel,
+  classifyCheckStatus,
+  classifyWorkerStatus,
+  formatCheckStatus,
 } from './status';
 export type { InfrastructureStatus, StatusTone } from './status';

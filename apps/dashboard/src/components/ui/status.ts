@@ -77,3 +77,33 @@ export function formatStatusLabel(status: string): string {
   }
   return status;
 }
+
+/**
+ * Map a raw health-check status from the monitoring API to the shared
+ * infrastructure vocabulary. Check statuses are `ok | paused | stopped`.
+ */
+export function classifyCheckStatus(status: string): InfrastructureStatus {
+  if (status === 'ok') return 'healthy';
+  if (status === 'paused') return 'degraded';
+  if (status === 'stopped') return 'stopped';
+  return 'error';
+}
+
+/**
+ * Map a raw worker status from the monitoring API to the shared
+ * infrastructure vocabulary. Worker statuses are `running | paused | stopped`.
+ */
+export function classifyWorkerStatus(status: string): InfrastructureStatus {
+  if (status === 'running') return 'running';
+  if (status === 'paused') return 'degraded';
+  if (status === 'stopped') return 'stopped';
+  return 'error';
+}
+
+/** Human-readable label for a raw health-check status. */
+export function formatCheckStatus(status: string): string {
+  if (status === 'ok') return 'Healthy';
+  if (status === 'paused') return 'Paused';
+  if (status === 'stopped') return 'Stopped';
+  return 'Error';
+}
