@@ -1,17 +1,21 @@
+import { Button } from './ui/Button';
+
 interface ErrorStateProps {
   message?: string;
+  title?: string;
   onRetry?: () => void;
 }
 
-export function ErrorState({ message, onRetry }: ErrorStateProps) {
+export function ErrorState({ message, title, onRetry }: ErrorStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+    <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
       <svg
-        className="mb-3 h-10 w-10 text-red-400"
+        className="mb-3 h-10 w-10 text-error"
         fill="none"
         viewBox="0 0 24 24"
         strokeWidth={1.5}
         stroke="currentColor"
+        aria-hidden="true"
       >
         <path
           strokeLinecap="round"
@@ -19,14 +23,12 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
           d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
         />
       </svg>
-      <p className="mb-3 text-sm text-gray-600">{message ?? 'Something went wrong'}</p>
+      <h3 className="text-section-title text-ink">{title ?? 'Something went wrong'}</h3>
+      {message && <p className="mt-1 max-w-sm text-description text-ink-muted">{message}</p>}
       {onRetry && (
-        <button
-          onClick={onRetry}
-          className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-        >
+        <Button variant="secondary" size="sm" className="mt-4" onClick={onRetry}>
           Retry
-        </button>
+        </Button>
       )}
     </div>
   );

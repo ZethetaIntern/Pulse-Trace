@@ -1,6 +1,7 @@
 import { useHealth } from '../hooks/useNotifications';
 import { useDashboardMetrics } from '../hooks/useAnalytics';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { PageHeader, Button } from '../components/ui';
 
 function HealthCard() {
   const { data: health, isLoading, isError, error, refetch } = useHealth();
@@ -20,15 +21,12 @@ function HealthCard() {
           <span className="h-3 w-3 rounded-full bg-red-500" />
           <span className="text-sm font-medium text-red-700">API Unreachable</span>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-ink-muted">
           {error instanceof Error ? error.message : 'Cannot reach the backend API'}
         </p>
-        <button
-          onClick={() => refetch()}
-          className="mt-3 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
-        >
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -79,15 +77,12 @@ function SummaryCards() {
           <span className="h-3 w-3 rounded-full bg-red-500" />
           <span className="text-sm font-medium text-red-700">Failed to load summary</span>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-ink-muted">
           {error instanceof Error ? error.message : 'Could not load dashboard metrics'}
         </p>
-        <button
-          onClick={() => refetch()}
-          className="mt-3 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
-        >
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -133,12 +128,10 @@ function formatUptime(seconds: number): string {
 export function OverviewPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">Overview</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          System health and notification summary.
-        </p>
-      </div>
+      <PageHeader
+        title="Overview"
+        description="System health and notification summary."
+      />
       <div className="grid gap-6 lg:grid-cols-2">
         <HealthCard />
         <SummaryCards />

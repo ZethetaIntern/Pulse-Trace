@@ -3,6 +3,22 @@ import { useQueueMetrics } from '../hooks/useMonitoring';
 import { useWorkerMetrics } from '../hooks/useMonitoring';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { StatusBadge } from '../components/StatusBadge';
+import { PageHeader, Button, StatusDot } from '../components/ui';
+import type { InfrastructureStatus } from '../components/ui/status';
+
+function classifyCheckStatus(status: string): InfrastructureStatus {
+  if (status === 'ok') return 'healthy';
+  if (status === 'paused') return 'degraded';
+  if (status === 'stopped') return 'stopped';
+  return 'error';
+}
+
+function classifyWorkerStatus(status: string): InfrastructureStatus {
+  if (status === 'running') return 'running';
+  if (status === 'paused') return 'degraded';
+  if (status === 'stopped') return 'stopped';
+  return 'error';
+}
 
 function formatUptime(seconds: number): string {
   if (seconds < 60) return `${Math.floor(seconds)}s`;
@@ -18,23 +34,17 @@ function HealthCheckCard({ label, check }: { label: string; check: { status: str
   const isStopped = check.status === 'stopped';
 
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+    <div className="flex items-center justify-between border-b border-line py-2 last:border-0">
       <div className="flex items-center gap-2">
-        <StatusBadge
-          status={
-            isOk ? 'DELIVERED' :
-            isDegraded || isStopped ? 'RETRY_PENDING' :
-            'FAILED'
-          }
-        />
-        <span className="text-sm font-medium text-gray-900">{label}</span>
+        <StatusDot status={classifyCheckStatus(check.status)} />
+        <span className="text-sm font-medium text-ink">{label}</span>
       </div>
       <div className="text-right">
-        <div className={`text-sm font-medium ${isOk ? 'text-green-700' : isDegraded || isStopped ? 'text-amber-700' : 'text-red-700'}`}>
+        <div className={`text-sm font-medium ${isOk ? 'text-success-text' : isDegraded || isStopped ? 'text-warning-text' : 'text-error-text'}`}>
           {check.status === 'ok' ? 'Healthy' : check.status === 'paused' ? 'Paused' : check.status === 'stopped' ? 'Stopped' : 'Error'}
         </div>
         {check.latencyMs !== undefined && (
-          <div className="text-xs text-gray-500">{check.latencyMs}ms</div>
+          <div className="text-xs text-ink-muted">{check.latencyMs}ms</div>
         )}
       </div>
     </div>
@@ -59,24 +69,21 @@ function HealthSection() {
           <span className="h-3 w-3 rounded-full bg-red-500" />
           <span className="text-sm font-medium text-red-700">Failed to load health</span>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-ink-muted">
           {error instanceof Error ? error.message : 'Could not load system health'}
         </p>
-        <button
-          onClick={() => refetch()}
-          className="mt-3 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
-        >
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
 
   const overallStatus = health.status;
   const statusColors = {
-    healthy: 'bg-green-500',
-    degraded: 'bg-amber-500',
-    unhealthy: 'bg-red-500',
+    healthy: 'bg-success',
+    degraded: 'bg-warning',
+    unhealthy: 'bg-error',
   };
 
   return (
@@ -134,15 +141,12 @@ function QueueSection() {
           <span className="h-3 w-3 rounded-full bg-red-500" />
           <span className="text-sm font-medium text-red-700">Failed to load queue metrics</span>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-ink-muted">
           {error instanceof Error ? error.message : 'Could not load queue metrics'}
         </p>
-        <button
-          onClick={() => refetch()}
-          className="mt-3 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
-        >
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -150,10 +154,8 @@ function QueueSection() {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-900">Queue: {queue.queueName}</h3>
-        <StatusBadge
-          status={queue.isPaused ? 'RETRY_PENDING' : 'DELIVERED'}
-        />
+        <h3 className="text-sm font-medium text-ink">Queue: {queue.queueName}</h3>
+        <StatusBadge status={queue.isPaused ? 'degraded' : 'running'} />
       </div>
       <dl className="grid grid-cols-2 gap-4">
         <div>
@@ -208,15 +210,12 @@ function WorkerSection() {
           <span className="h-3 w-3 rounded-full bg-red-500" />
           <span className="text-sm font-medium text-red-700">Failed to load worker metrics</span>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-ink-muted">
           {error instanceof Error ? error.message : 'Could not load worker metrics'}
         </p>
-        <button
-          onClick={() => refetch()}
-          className="mt-3 rounded bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200"
-        >
+        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -229,14 +228,8 @@ function WorkerSection() {
           <div key={worker.id} className="border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-gray-900">{worker.name}</span>
-                <StatusBadge
-                  status={
-                    worker.status === 'running' ? 'DELIVERED' :
-                    worker.status === 'paused' ? 'RETRY_PENDING' :
-                    'FAILED'
-                  }
-                />
+                <span className="font-mono text-sm text-ink">{worker.name}</span>
+                <StatusBadge status={classifyWorkerStatus(worker.status)} />
               </div>
               <div className="text-right text-xs text-gray-500">
                 <div>PID: {worker.id.split('-').pop()}</div>
@@ -298,12 +291,10 @@ function WorkerSection() {
 export function MonitoringPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">Monitoring</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Real-time queue and worker health metrics.
-        </p>
-      </div>
+      <PageHeader
+        title="Monitoring"
+        description="Real-time queue and worker health metrics."
+      />
       <div className="grid gap-6 lg:grid-cols-2">
         <HealthSection />
         <QueueSection />

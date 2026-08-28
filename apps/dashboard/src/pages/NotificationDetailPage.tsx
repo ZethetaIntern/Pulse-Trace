@@ -6,6 +6,7 @@ import { JsonViewer } from '../components/JsonViewer';
 import { TimelineView } from '../components/TimelineView';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorState } from '../components/ErrorState';
+import { Button } from '../components/ui';
 import type { NotificationStatus } from '../types';
 
 const REPLAYABLE_STATUSES: NotificationStatus[] = [
@@ -105,38 +106,31 @@ function ReplaySection({
         Replay
       </h2>
       {!showConfirm ? (
-        <button
-          onClick={() => setShowConfirm(true)}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
-        >
+        <Button onClick={() => setShowConfirm(true)}>
           Replay Notification
-        </button>
+        </Button>
       ) : (
         <div className="space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700">Reason (optional)</label>
+            <label className="mb-1 block text-xs font-medium text-ink-muted">Reason (optional)</label>
             <input
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Provider recovered"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-500 focus:outline-none"
+              className="field-control w-full"
             />
           </div>
-          <div className="flex gap-2">
-            <button
+          <div className="flex flex-wrap gap-2">
+            <Button
               onClick={handleReplay}
               disabled={replayMutation.isPending}
-              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
             >
               {replayMutation.isPending ? 'Replaying...' : 'Confirm Replay'}
-            </button>
-            <button
-              onClick={() => setShowConfirm(false)}
-              className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
+            </Button>
+            <Button variant="secondary" onClick={() => setShowConfirm(false)}>
               Cancel
-            </button>
+            </Button>
           </div>
           {replayMutation.isError && (
             <p className="text-sm text-red-600">

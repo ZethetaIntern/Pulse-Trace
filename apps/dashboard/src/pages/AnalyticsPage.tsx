@@ -5,6 +5,7 @@ import { DeliveryTrendChart } from '../components/analytics/DeliveryTrendChart';
 import { ChannelBreakdown } from '../components/analytics/ChannelBreakdown';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorState } from '../components/ErrorState';
+import { PageHeader } from '../components/ui';
 import type { TrendInterval } from '../types';
 
 function getDefaultDates(): { from: string; to: string } {
@@ -93,29 +94,29 @@ function TrendsSection() {
       </h2>
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">From</label>
+          <label className="field-label">From</label>
           <input
             type="date"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
-            className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-gray-500 focus:outline-none"
+            className="field-control"
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">To</label>
+          <label className="field-label">To</label>
           <input
             type="date"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-gray-500 focus:outline-none"
+            className="field-control"
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Interval</label>
+          <label className="field-label">Interval</label>
           <select
             value={interval}
             onChange={(e) => setInterval(e.target.value as TrendInterval)}
-            className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-gray-500 focus:outline-none"
+            className="field-control"
           >
             <option value="hour">Hour</option>
             <option value="day">Day</option>
@@ -172,12 +173,10 @@ function ChannelsSection() {
 export function AnalyticsPage() {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">Analytics</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Notification metrics, delivery trends, and channel statistics.
-        </p>
-      </div>
+      <PageHeader
+        title="Analytics"
+        description="Notification metrics, delivery trends, and channel statistics."
+      />
 
       <SummarySection />
 

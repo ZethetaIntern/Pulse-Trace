@@ -2,22 +2,130 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body,
-#root {
-  height: 100%;
+/* ============================================================
+   PulseTrace design tokens — single source of truth
+   ============================================================
+   Tokens are CSS custom properties consumed by Tailwind through
+   the theme extension in tailwind.config.js.
+
+   Semantic color usage:
+     success  → green   (delivered, healthy, running)
+     warning  → amber   (retrying, degraded, paused)
+     error    → red     (failed, dlq, stopped-with-error)
+     info     → blue    (queued, processing, informational)
+     neutral  → slate   (created, skipped, empty states)
+
+   Spacing uses a 4px base scale. Tailwind utilities map directly:
+     4=4px 8=8px 12=12px 16=16px 24=24px 32=32px 40=40px.
+   ============================================================ */
+:root {
+  /* Surfaces */
+  --color-canvas: 249 250 251; /* page background          */
+  --color-surface: 255 255 255; /* card / panel background  */
+
+  /* Text */
+  --color-ink: 17 24 39; /* primary text              */
+  --color-ink-muted: 107 114 128; /* secondary / meta text    */
+  --color-ink-faint: 156 163 175; /* tertiary / placeholder   */
+
+  /* Borders */
+  --color-line: 229 231 235; /* subtle dividers           */
+  --color-line-strong: 209 213 219; /* inputs, prominent edges */
+
+  /* Action / primary */
+  --color-primary: 17 24 39; /* primary button / active   */
+  --color-primary-hover: 31 41 55; /* primary hover state      */
+  --color-primary-soft: 243 244 246; /* subtle primary surface   */
+
+  /* Semantic — success */
+  --color-success: 22 163 74;
+  --color-success-soft: 240 253 244;
+  --color-success-text: 21 128 61;
+
+  /* Semantic — warning */
+  --color-warning: 217 119 6;
+  --color-warning-soft: 255 251 235;
+  --color-warning-text: 180 83 9;
+
+  /* Semantic — error */
+  --color-error: 220 38 38;
+  --color-error-soft: 254 242 242;
+  --color-error-text: 185 28 28;
+
+  /* Semantic — info */
+  --color-info: 37 99 235;
+  --color-info-soft: 239 246 255;
+  --color-info-text: 29 78 216;
+
+  /* Semantic — neutral */
+  --color-neutral: 107 114 128;
+  --color-neutral-soft: 243 244 246;
+  --color-neutral-text: 75 85 99;
+
+  /* Spacing (4px base) — document the scale; Tailwind utilities
+     p-1/p-2/p-3/p-4/p-6/p-8/p-10 provide 4/8/12/16/24/32/40px. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* Radius */
+  --radius-control: 6px; /* buttons, inputs, badges */
+  --radius-card: 8px; /* cards, panels          */
+  --radius-container: 12px; /* large surfaces          */
+
+  /* Shadows (restrained) */
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
 }
 
-body {
-  margin: 0;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    Roboto,
-    'Helvetica Neue',
-    Arial,
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: rgb(var(--color-canvas));
+    color: rgb(var(--color-ink));
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Consistent keyboard focus indicator across interactive elements. */
+  :where(a[href], button, summary, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline: 2px solid rgb(var(--color-info));
+    outline-offset: 2px;
+  }
+
+  /* Respect users who prefer reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Standardized form controls: inputs, selects, date fields. */
+  .field-control {
+    @apply h-8 rounded-control border border-line-strong bg-surface px-2 text-sm text-ink;
+    @apply focus:border-info focus:outline-none focus:ring-2 focus:ring-info/20;
+    @apply disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .field-label {
+    @apply text-xs font-medium text-ink-muted;
+  }
 }

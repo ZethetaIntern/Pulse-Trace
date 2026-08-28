@@ -6,6 +6,7 @@ import { Pagination } from '../components/Pagination';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
+import { PageHeader, Button } from '../components/ui';
 import type { ListNotificationsParams, NotificationStatus, Channel, Category, Priority, SortField, SortOrder } from '../types';
 
 const STATUS_OPTIONS: NotificationStatus[] = [
@@ -48,12 +49,14 @@ function FilterBar({
         options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
         onChange={(v) => onChange({ ...params, priority: (v as Priority) || undefined, page: 1 })}
       />
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => onChange({ sort: 'createdAt', order: 'desc' })}
-        className="rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 self-end"
+        className="self-end"
       >
         Clear filters
-      </button>
+      </Button>
     </div>
   );
 }
@@ -71,11 +74,11 @@ function FilterSelect({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-500">{label}</label>
+      <label className="field-label">{label}</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded border border-gray-300 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-gray-500 focus:outline-none"
+        className="field-control"
       >
         <option value="">All</option>
         {options.map((o) => (
@@ -148,10 +151,10 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">Notifications</h1>
-        <p className="mt-1 text-sm text-gray-500">Browse and filter all notifications.</p>
-      </div>
+      <PageHeader
+        title="Notifications"
+        description="Browse and filter all notifications."
+      />
 
       <FilterBar params={params} onChange={setParams} />
 
