@@ -1,228 +1,389 @@
-import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useNotification, useReplayHistory, useReplayNotification } from '../hooks/useNotifications';
+import { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useNotification,
+  useReplayHistory,
+  useReplayNotification,
+  useTimeline,
+} from '../hooks/useNotifications';
 import { StatusBadge, PriorityBadge, ChannelBadge, CategoryBadge } from '../components/StatusBadge';
 import { JsonViewer } from '../components/JsonViewer';
 import { TimelineView } from '../components/TimelineView';
-import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorState } from '../components/ErrorState';
-import { Button } from '../components/ui';
-import type { NotificationStatus } from '../types';
+import { EmptyState } from '../components/EmptyState';
+import { Card, Button, LoadingSkeleton } from '../components/ui';
+import { ApiRequestError } from '../api/client';
+import type { TimelineEventResponse, NotificationStatus } from '../types';
 
 const REPLAYABLE_STATUSES: NotificationStatus[] = [
   'DELIVERED', 'FAILED', 'RETRY_PENDING', 'DLQ', 'SKIPPED',
 ];
 
+const FAILURE_STATUSES: NotificationStatus[] = ['FAILED', 'RETRY_PENDING', 'DLQ'];
+
 function isReplayable(status: NotificationStatus): boolean {
   return REPLAYABLE_STATUSES.includes(status);
 }
 
-function formatDate(iso: string): string {
+function isFailureStatus(status: NotificationStatus): boolean {
+  return FAILURE_STATUSES.includes(status);
+}
+
+// ─── Relative time (mirrors the shared approach used elsewhere) ───────────────
+
+function useNow(intervalMs = 5_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
+function formatRelativeTime(time: number | string, now: number): string {
+  const t = typeof time === 'number' ? time : Date.parse(time);
+  if (!Number.isFinite(t)) return '—';
+  const seconds = Math.max(0, Math.round((now - t) / 1000));
+  if (seconds < 45) return seconds <= 10 ? 'just now' : `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-// ─── Notification Info Section ───────────────────────────────────────────────
+// ─── Copyable ID with accessible feedback ────────────────────────────────────
 
-function NotificationInfo({ data }: { data: NonNullable<ReturnType<typeof useNotification>['data']> }) {
+function CopyableId({ id, label }: { id: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable (e.g. non-secure context); leave feedback off.
+    }
+  };
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="flex items-start justify-between mb-4">
-        <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">
-          Notification Details
-        </h2>
-        <StatusBadge status={data.status} />
-      </div>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-        <InfoItem label="ID">
-          <span className="font-mono text-xs text-gray-700 break-all">{data.id}</span>
-        </InfoItem>
-        <InfoItem label="Status">
-          <StatusBadge status={data.status} />
-        </InfoItem>
-        <InfoItem label="User ID">
-          <span className="font-mono text-xs text-gray-700 break-all">{data.userId}</span>
-        </InfoItem>
-        <InfoItem label="Template ID">
-          <span className="font-mono text-xs text-gray-700 break-all">{data.templateId}</span>
-        </InfoItem>
-        <InfoItem label="Channel">
-          <ChannelBadge channel={data.channel} />
-        </InfoItem>
-        <InfoItem label="Category">
-          <CategoryBadge category={data.category} />
-        </InfoItem>
-        <InfoItem label="Priority">
-          <PriorityBadge priority={data.priority} />
-        </InfoItem>
-        <InfoItem label="Created">{formatDate(data.createdAt)}</InfoItem>
-        <InfoItem label="Updated">{formatDate(data.updatedAt)}</InfoItem>
-      </dl>
-      <div className="mt-4 space-y-3">
-        <JsonViewer data={data.payload} label="Payload" defaultExpanded />
-        <JsonViewer data={data.metadata} label="Metadata" />
-      </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <code className="min-w-0 break-all font-mono text-xs text-ink-muted">{id}</code>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${label}`}
+        className="inline-flex items-center rounded-control border border-line px-1.5 py-0.5 text-meta font-medium text-ink-muted transition-colors hover:bg-neutral-soft hover:text-ink"
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+      <span className="sr-only" aria-live="polite">
+        {copied ? `${label} copied to clipboard.` : ''}
+      </span>
     </div>
   );
 }
 
-function InfoItem({ label, children }: { label: string; children: React.ReactNode }) {
+// ─── Identity summary (hairline key/value strip) ─────────────────────────────
+
+function SummaryCell({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <dt className="text-xs font-medium text-gray-500">{label}</dt>
-      <dd className="mt-0.5">{children}</dd>
+    <div className="min-w-0 bg-surface px-4 py-3">
+      <dt className="truncate text-meta text-ink-faint">{label}</dt>
+      <dd className="mt-1 flex min-w-0 items-center">{children}</dd>
     </div>
   );
 }
 
-// ─── Replay Section ──────────────────────────────────────────────────────────
+function SummaryTime({ iso, now }: { iso: string; now: number }) {
+  return (
+    <time
+      dateTime={iso}
+      title={formatDateTime(iso)}
+      className="truncate text-sm text-ink"
+    >
+      {formatRelativeTime(iso, now)}
+    </time>
+  );
+}
+
+// ─── Technical details ───────────────────────────────────────────────────────
+
+function TechRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-meta text-ink-faint">{label}</dt>
+      <dd className="mt-0.5 min-w-0">{children}</dd>
+    </div>
+  );
+}
+
+// ─── Failure / retry information ─────────────────────────────────────────────
+
+function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function metadataNumber(metadata: Record<string, unknown> | undefined, key: string): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'number' ? value : undefined;
+}
+
+function FailureCard({
+  status,
+  events,
+}: {
+  status: NotificationStatus;
+  events?: TimelineEventResponse[];
+}) {
+  if (!isFailureStatus(status)) return null;
+
+  const failures = (events ?? []).filter((e) => e.event === 'DELIVERY_FAILED');
+  const lastFailure = failures[failures.length - 1];
+  const errorMsg = metadataString(lastFailure?.metadata, 'error');
+  const attempt = metadataNumber(lastFailure?.metadata, 'attempt');
+  const maxAttempts = metadataNumber(lastFailure?.metadata, 'maxAttempts');
+  const retryScheduled = (events ?? []).some((e) => e.event === 'RETRY_SCHEDULED');
+
+  const title =
+    status === 'RETRY_PENDING'
+      ? 'Retry pending'
+      : status === 'DLQ'
+        ? 'In dead-letter queue'
+        : 'Delivery failed';
+  const subtitle =
+    status === 'RETRY_PENDING'
+      ? 'Delivery failed and a retry is scheduled.'
+      : status === 'DLQ'
+        ? 'This notification was moved to the dead-letter queue.'
+        : 'This notification could not be delivered.';
+
+  return (
+    <Card title={title} subtitle={subtitle}>
+      <div className="flex items-center gap-2">
+        <StatusBadge status={status} withDot />
+      </div>
+      {errorMsg && (
+        <p className="mt-3 rounded-control border border-line bg-neutral-soft/50 px-3 py-2 font-mono text-xs leading-relaxed text-ink-muted">
+          {errorMsg}
+        </p>
+      )}
+      {(attempt !== undefined || maxAttempts !== undefined) && (
+        <p className="mt-2 text-meta text-ink-muted">
+          Failed attempt {attempt ?? '—'} of {maxAttempts ?? '—'}
+        </p>
+      )}
+      {retryScheduled && (
+        <p className="mt-1 text-meta text-ink-muted">Another attempt was scheduled automatically.</p>
+      )}
+    </Card>
+  );
+}
+
+// ─── Replay ──────────────────────────────────────────────────────────────────
 
 function ReplaySection({
   notificationId,
   status,
+  onReplayed,
 }: {
   notificationId: string;
   status: NotificationStatus;
+  onReplayed: () => void;
 }) {
+  const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
-  const [showConfirm, setShowConfirm] = useState(false);
   const replayMutation = useReplayNotification(notificationId);
 
-  const canReplay = isReplayable(status);
+  if (!isReplayable(status)) return null;
 
-  if (!canReplay) return null;
-
-  const handleReplay = () => {
-    replayMutation.mutate(reason || undefined, {
+  const submit = () => {
+    replayMutation.mutate(reason.trim() || undefined, {
       onSuccess: () => {
-        setShowConfirm(false);
+        setOpen(false);
         setReason('');
+        onReplayed();
       },
     });
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-semibold text-gray-900 uppercase tracking-wider">
-        Replay
-      </h2>
-      {!showConfirm ? (
-        <Button onClick={() => setShowConfirm(true)}>
-          Replay Notification
+    <section
+      id="replay-section"
+      tabIndex={-1}
+      aria-label="Replay notification"
+      className="rounded-card border border-line bg-surface p-5 focus:outline-none"
+    >
+      <h3 className="text-section-title text-ink">Replay</h3>
+      {replayMutation.isSuccess && replayMutation.data && (
+        <p className="mt-3 rounded-control bg-success-soft px-3 py-2 text-sm text-success-text">
+          Replay started. New notification:{' '}
+          <Link
+            to={`/notifications/${replayMutation.data.notificationId}`}
+            className="font-mono underline hover:text-success-text"
+          >
+            {replayMutation.data.notificationId.slice(0, 8)}…
+          </Link>
+        </p>
+      )}
+      {!replayMutation.isSuccess && !open && (
+        <Button className="mt-3" size="sm" onClick={() => setOpen(true)}>
+          Replay notification
         </Button>
-      ) : (
-        <div className="space-y-3">
+      )}
+      {!replayMutation.isSuccess && open && (
+        <div className="mt-3 space-y-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-ink-muted">Reason (optional)</label>
+            <label htmlFor="replay-reason" className="field-label">
+              Reason (optional)
+            </label>
             <input
+              id="replay-reason"
               type="text"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Provider recovered"
-              className="field-control w-full"
+              className="field-control mt-1 w-full"
             />
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={submit} disabled={replayMutation.isPending}>
+              {replayMutation.isPending ? 'Replaying…' : 'Replay notification'}
+            </Button>
             <Button
-              onClick={handleReplay}
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setOpen(false);
+                setReason('');
+              }}
               disabled={replayMutation.isPending}
             >
-              {replayMutation.isPending ? 'Replaying...' : 'Confirm Replay'}
-            </Button>
-            <Button variant="secondary" onClick={() => setShowConfirm(false)}>
               Cancel
             </Button>
           </div>
           {replayMutation.isError && (
-            <p className="text-sm text-red-600">
-              {replayMutation.error instanceof Error
+            <p role="alert" className="rounded-control bg-error-soft px-3 py-2 text-sm text-error-text">
+              {replayMutation.error instanceof ApiRequestError
                 ? replayMutation.error.message
-                : 'Replay failed'}
+                : 'Replay failed. Please try again.'}
             </p>
-          )}
-          {replayMutation.isSuccess && replayMutation.data && (
-            <div className="rounded-md bg-green-50 border border-green-200 p-3">
-              <p className="text-sm font-medium text-green-800">Replay started</p>
-              <p className="mt-1 text-xs text-green-600">
-                New notification:{' '}
-                <Link
-                  to={`/notifications/${replayMutation.data.notificationId}`}
-                  className="font-mono underline hover:text-green-800"
-                >
-                  {replayMutation.data.notificationId.slice(0, 8)}…
-                </Link>
-              </p>
-            </div>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
-// ─── Replay History ──────────────────────────────────────────────────────────
+// ─── Replay history ──────────────────────────────────────────────────────────
 
-function ReplayHistorySection({ notificationId }: { notificationId: string }) {
+function ReplayHistoryCard({ notificationId, now }: { notificationId: string; now: number }) {
   const { data: replays, isLoading } = useReplayHistory(notificationId);
 
   if (isLoading) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold text-gray-900 uppercase tracking-wider">
-          Replay History
-        </h2>
-        <LoadingSpinner message="Loading replay history..." />
-      </div>
+      <Card title="Replay history" subtitle="Attempts to re-deliver this notification">
+        <LoadingSkeleton rows={2} />
+      </Card>
     );
   }
 
   if (!replays || replays.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-semibold text-gray-900 uppercase tracking-wider">
-        Replay History
-      </h2>
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 text-sm">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Triggered At</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reason</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">New Notification</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {replays.map((r) => (
-              <tr key={r.replayId} className="hover:bg-gray-50">
-                <td className="whitespace-nowrap px-3 py-2 text-gray-700">
-                  {formatDate(r.createdAt)}
-                </td>
-                <td className="px-3 py-2 text-gray-500">{r.reason || '—'}</td>
-                <td className="whitespace-nowrap px-3 py-2">
-                  {r.newNotificationId ? (
-                    <Link
-                      to={`/notifications/${r.newNotificationId}`}
-                      className="font-mono text-xs text-blue-600 hover:underline"
-                    >
-                      {r.newNotificationId.slice(0, 8)}…
-                    </Link>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {r.newNotificationStatus ? (
-                    <StatusBadge status={r.newNotificationStatus as NotificationStatus} />
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <Card title="Replay history" subtitle="Attempts to re-deliver this notification">
+      <ul role="list" className="divide-y divide-line">
+        {replays.map((r) => (
+          <li key={r.replayId} className="py-3 first:pt-0 last:pb-0">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="text-meta text-ink-faint">
+                <time dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>
+                  {formatRelativeTime(r.createdAt, now)}
+                </time>
+                {r.triggeredBy && <span> · {r.triggeredBy}</span>}
+              </span>
+              {r.newNotificationStatus ? (
+                <StatusBadge status={r.newNotificationStatus as NotificationStatus} size="sm" />
+              ) : (
+                <span className="text-meta text-ink-faint">No new notification</span>
+              )}
+            </div>
+            {r.reason && <p className="mt-1 text-sm text-ink">{r.reason}</p>}
+            {r.newNotificationId && (
+              <Link
+                to={`/notifications/${r.newNotificationId}`}
+                className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs text-primary transition-colors hover:underline"
+              >
+                View new notification
+                <span aria-hidden="true">→</span>
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+// ─── Loading skeleton ────────────────────────────────────────────────────────
+
+function DetailSkeleton() {
+  const pulse = 'animate-pulse rounded bg-neutral-soft';
+  return (
+    <div aria-busy="true" className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-2">
+          <div className={`h-7 w-52 ${pulse}`} />
+          <div className={`h-4 w-64 ${pulse}`} />
+        </div>
+        <div className="flex gap-2">
+          <div className={`h-8 w-36 ${pulse}`} />
+          <div className={`h-8 w-40 ${pulse}`} />
+        </div>
       </div>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+        {[0, 1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="bg-surface px-4 py-3">
+            <div className={`h-3 w-14 ${pulse}`} />
+            <div className={`mt-2 h-4 w-24 ${pulse}`} />
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <div className="space-y-5">
+          <div className="rounded-card border border-line bg-surface p-5">
+            <LoadingSkeleton rows={5} />
+          </div>
+          <div className="rounded-card border border-line bg-surface p-5">
+            <LoadingSkeleton rows={3} />
+          </div>
+        </div>
+        <div className="space-y-5">
+          <div className="rounded-card border border-line bg-surface p-5">
+            <LoadingSkeleton rows={4} />
+          </div>
+          <div className="rounded-card border border-line bg-surface p-5">
+            <LoadingSkeleton rows={3} />
+          </div>
+        </div>
+      </div>
+      <span className="sr-only" role="status">
+        Loading notification…
+      </span>
     </div>
   );
 }
@@ -231,49 +392,169 @@ function ReplayHistorySection({ notificationId }: { notificationId: string }) {
 
 export function NotificationDetailPage() {
   const { notificationId } = useParams<{ notificationId: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const id = notificationId ?? '';
+  const now = useNow();
+
   const { data, isLoading, isError, error, refetch } = useNotification(id);
+  const { data: timelineEvents } = useTimeline(id);
+
+  const isNotFound = isError && error instanceof ApiRequestError && error.status === 404;
+
+  const handleReplayed = () => {
+    queryClient.invalidateQueries({ queryKey: ['notification', id] });
+    queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+    queryClient.invalidateQueries({ queryKey: ['replays', id] });
+  };
+
+  const focusReplay = () => {
+    const el = document.getElementById('replay-section');
+    el?.scrollIntoView({ block: 'nearest' });
+    el?.focus();
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          to="/notifications"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </Link>
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Notification Detail</h1>
-          {id && (
-            <p className="mt-0.5 font-mono text-xs text-gray-400">{id}</p>
-          )}
-        </div>
-      </div>
+    <div className="space-y-5">
+      {isLoading && <DetailSkeleton />}
 
-      {isLoading && <LoadingSpinner message="Loading notification..." />}
-      {isError && (
+      {isError && isNotFound && (
+        <div className="rounded-card border border-line bg-surface">
+          <EmptyState
+            title="Notification not found"
+            message="This notification may have been deleted or the ID may be invalid."
+            action={
+              <Button variant="secondary" size="sm" onClick={() => navigate('/notifications')}>
+                Back to notifications
+              </Button>
+            }
+          />
+        </div>
+      )}
+
+      {isError && !isNotFound && (
         <ErrorState
-          message={error instanceof Error ? error.message : 'Failed to load notification'}
+          title="Unable to load notification"
+          message="We couldn't retrieve this notification right now."
           onRetry={refetch}
         />
       )}
 
       {!isLoading && !isError && data && (
-        <div className="space-y-6">
-          <NotificationInfo data={data} />
-
-          <div className="rounded-lg border border-gray-200 bg-white p-5">
-            <TimelineView notificationId={id} />
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <h1 className="text-page-title text-ink">Notification</h1>
+                <StatusBadge status={data.status} withDot />
+              </div>
+              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-description text-ink-muted">
+                <span className="font-mono text-meta text-ink-faint" title={data.id}>
+                  {data.id.slice(0, 8)}…
+                </span>
+                <span aria-hidden="true" className="text-ink-faint">·</span>
+                <span>
+                  Created{' '}
+                  <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)}>
+                    {formatRelativeTime(data.createdAt, now)}
+                  </time>
+                </span>
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => navigate('/notifications')}>
+                <span aria-hidden="true">←</span>
+                Back to notifications
+              </Button>
+              {isReplayable(data.status) && (
+                <Button size="sm" onClick={focusReplay}>
+                  Replay notification
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <ReplaySection notificationId={id} status={data.status} />
-            <ReplayHistorySection notificationId={id} />
+          <section aria-label="Notification summary" className="overflow-hidden rounded-card border border-line bg-surface">
+            <dl className="grid grid-cols-2 gap-px bg-line sm:grid-cols-3 lg:grid-cols-6">
+              <SummaryCell label="Status">
+                <StatusBadge status={data.status} size="sm" />
+              </SummaryCell>
+              <SummaryCell label="Channel">
+                <ChannelBadge channel={data.channel} />
+              </SummaryCell>
+              <SummaryCell label="Category">
+                <CategoryBadge category={data.category} />
+              </SummaryCell>
+              <SummaryCell label="Priority">
+                <PriorityBadge priority={data.priority} />
+              </SummaryCell>
+              <SummaryCell label="Created">
+                <SummaryTime iso={data.createdAt} now={now} />
+              </SummaryCell>
+              <SummaryCell label="Updated">
+                <SummaryTime iso={data.updatedAt} now={now} />
+              </SummaryCell>
+            </dl>
+          </section>
+
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+            <div className="min-w-0 space-y-5">
+              <Card
+                title="Delivery lifecycle"
+                subtitle="Events recorded for this notification"
+                className="overflow-hidden"
+              >
+                <TimelineView notificationId={id} />
+              </Card>
+              <Card
+                title="Payload"
+                subtitle="The JSON sent to the channel for this notification"
+              >
+                <JsonViewer
+                  data={data.payload}
+                  label="Payload JSON"
+                  defaultExpanded={Object.keys(data.payload).length > 0}
+                />
+              </Card>
+            </div>
+
+            <div className="min-w-0 space-y-5">
+              <Card title="Technical details" subtitle="Identifiers and timestamps">
+                <dl className="space-y-3">
+                  <TechRow label="Notification ID">
+                    <CopyableId id={data.id} label="notification ID" />
+                  </TechRow>
+                  <TechRow label="User ID">
+                    <CopyableId id={data.userId} label="user ID" />
+                  </TechRow>
+                  <TechRow label="Template ID">
+                    <CopyableId id={data.templateId} label="template ID" />
+                  </TechRow>
+                  <TechRow label="Created">
+                    <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)} className="text-sm text-ink">
+                      {formatRelativeTime(data.createdAt, now)}
+                    </time>
+                  </TechRow>
+                  <TechRow label="Updated">
+                    <time dateTime={data.updatedAt} title={formatDateTime(data.updatedAt)} className="text-sm text-ink">
+                      {formatRelativeTime(data.updatedAt, now)}
+                    </time>
+                  </TechRow>
+                </dl>
+              </Card>
+
+              <FailureCard status={data.status} events={timelineEvents} />
+
+              <ReplaySection
+                notificationId={id}
+                status={data.status}
+                onReplayed={handleReplayed}
+              />
+
+              <ReplayHistoryCard notificationId={id} now={now} />
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

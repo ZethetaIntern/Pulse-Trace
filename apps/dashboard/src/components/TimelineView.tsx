@@ -1,76 +1,103 @@
+import { useEffect, useState } from 'react';
 import { useTimeline } from '../hooks/useNotifications';
-import { LoadingSpinner } from './LoadingSpinner';
 import { ErrorState } from './ErrorState';
 import { EmptyState } from './EmptyState';
+import { LoadingSkeleton } from './ui';
+import { STATUS_TONE_BADGE, STATUS_TONE_DOT } from './ui/status';
+import type { StatusTone } from './ui/status';
 import type { TimelineEventResponse } from '../types';
 
-// Event type → visual category for color coding
-const EVENT_CATEGORY: Record<string, { color: string; label: string }> = {
-  NOTIFICATION_CREATED: { color: 'bg-blue-500', label: 'creation' },
-  REQUEST_VALIDATED: { color: 'bg-blue-400', label: 'creation' },
-  NOTIFICATION_STORED: { color: 'bg-blue-400', label: 'creation' },
-  JOB_QUEUED: { color: 'bg-indigo-500', label: 'queue' },
-  WORKER_STARTED: { color: 'bg-yellow-500', label: 'worker' },
-  WORKER_COMPLETED: { color: 'bg-yellow-400', label: 'worker' },
-  PREFERENCE_CHECKED: { color: 'bg-teal-500', label: 'processing' },
-  TEMPLATE_RESOLVED: { color: 'bg-teal-400', label: 'processing' },
-  TEMPLATE_RENDERED: { color: 'bg-teal-400', label: 'processing' },
-  CHANNEL_SELECTED: { color: 'bg-teal-500', label: 'processing' },
-  PROVIDER_INVOKED: { color: 'bg-orange-500', label: 'delivery' },
-  DELIVERY_SUCCEEDED: { color: 'bg-green-500', label: 'delivery' },
-  DELIVERY_FAILED: { color: 'bg-red-500', label: 'failure' },
-  RETRY_SCHEDULED: { color: 'bg-orange-400', label: 'retry' },
-  RETRY_STARTED: { color: 'bg-orange-400', label: 'retry' },
-  DLQ_MOVED: { color: 'bg-purple-500', label: 'failure' },
-  REPLAY_CREATED: { color: 'bg-purple-400', label: 'replay' },
-  REPLAY_REQUESTED: { color: 'bg-purple-400', label: 'replay' },
-  REPLAY_STARTED: { color: 'bg-purple-500', label: 'replay' },
-  REPLAY_COMPLETED: { color: 'bg-purple-400', label: 'replay' },
+/**
+ * Delivery lifecycle timeline.
+ *
+ * Renders the real events returned by GET /notifications/:id/timeline.
+ * No events are manufactured: unknown event names fall back to a neutral
+ * presentation. Friendly labels are presentation only — the raw event name is
+ * kept via `title` for investigation.
+ */
+
+// Real Prisma EventType vocabulary → semantic tone (restrained, navigation-safe).
+const EVENT_TONE: Record<string, StatusTone> = {
+  NOTIFICATION_CREATED: 'neutral',
+  REQUEST_VALIDATED: 'neutral',
+  NOTIFICATION_STORED: 'neutral',
+  JOB_QUEUED: 'info',
+  WORKER_STARTED: 'info',
+  PREFERENCE_CHECKED: 'info',
+  TEMPLATE_RESOLVED: 'info',
+  TEMPLATE_RENDERED: 'info',
+  CHANNEL_SELECTED: 'info',
+  PROVIDER_INVOKED: 'info',
+  WORKER_COMPLETED: 'success',
+  DELIVERY_SUCCEEDED: 'success',
+  DELIVERY_FAILED: 'error',
+  RETRY_SCHEDULED: 'warning',
+  RETRY_STARTED: 'warning',
+  DLQ_MOVED: 'error',
+  REPLAY_CREATED: 'info',
+  REPLAY_REQUESTED: 'info',
+  REPLAY_STARTED: 'info',
+  REPLAY_COMPLETED: 'info',
 };
 
-const CATEGORY_STYLES: Record<string, string> = {
-  creation: 'bg-blue-50 text-blue-700',
-  queue: 'bg-indigo-50 text-indigo-700',
-  worker: 'bg-yellow-50 text-yellow-700',
-  processing: 'bg-teal-50 text-teal-700',
-  delivery: 'bg-orange-50 text-orange-700',
-  failure: 'bg-red-50 text-red-700',
-  retry: 'bg-orange-50 text-orange-700',
-  replay: 'bg-purple-50 text-purple-700',
+const EVENT_LABELS: Record<string, string> = {
+  NOTIFICATION_CREATED: 'Notification created',
+  REQUEST_VALIDATED: 'Request validated',
+  NOTIFICATION_STORED: 'Notification stored',
+  JOB_QUEUED: 'Job queued',
+  WORKER_STARTED: 'Worker started',
+  WORKER_COMPLETED: 'Worker completed',
+  PREFERENCE_CHECKED: 'Preferences checked',
+  TEMPLATE_RESOLVED: 'Template resolved',
+  TEMPLATE_RENDERED: 'Template rendered',
+  CHANNEL_SELECTED: 'Channel selected',
+  PROVIDER_INVOKED: 'Provider invoked',
+  DELIVERY_SUCCEEDED: 'Delivery succeeded',
+  DELIVERY_FAILED: 'Delivery failed',
+  RETRY_SCHEDULED: 'Retry scheduled',
+  RETRY_STARTED: 'Retry started',
+  DLQ_MOVED: 'Moved to dead-letter queue',
+  REPLAY_CREATED: 'Replay created',
+  REPLAY_REQUESTED: 'Replay requested',
+  REPLAY_STARTED: 'Replay started',
+  REPLAY_COMPLETED: 'Replay completed',
 };
 
-function formatTimestamp(iso: string): string {
-  return new Date(iso).toLocaleString();
+const EVENT_CHIP: Record<string, string> = {
+  DELIVERY_SUCCEEDED: 'delivered',
+  DELIVERY_FAILED: 'failed',
+  RETRY_SCHEDULED: 'retry',
+  RETRY_STARTED: 'retry',
+  DLQ_MOVED: 'dlq',
+  REPLAY_CREATED: 'replay',
+  REPLAY_REQUESTED: 'replay',
+  REPLAY_STARTED: 'replay',
+  REPLAY_COMPLETED: 'replay',
+};
+
+function useNow(intervalMs = 5_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
 }
 
-function TimelineItem({ event, isLast }: { event: TimelineEventResponse; isLast: boolean }) {
-  const category = EVENT_CATEGORY[event.event] ?? { color: 'bg-gray-400', label: 'other' };
+function formatRelativeTime(time: number | string, now: number): string {
+  const t = typeof time === 'number' ? time : Date.parse(time);
+  if (!Number.isFinite(t)) return '—';
+  const seconds = Math.max(0, Math.round((now - t) / 1000));
+  if (seconds < 45) return seconds <= 10 ? 'just now' : `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
 
-  return (
-    <div className="relative flex gap-4 pb-6">
-      {/* Connector line */}
-      {!isLast && (
-        <div className="absolute left-[11px] top-6 h-full w-0.5 bg-gray-200" />
-      )}
-      {/* Dot */}
-      <div className={`mt-1 h-3 w-3 shrink-0 rounded-full ring-4 ring-white ${category.color}`} />
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-900">{event.event}</span>
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_STYLES[category.label] ?? 'bg-gray-100 text-gray-600'}`}
-          >
-            {category.label}
-          </span>
-        </div>
-        <p className="mt-0.5 text-xs text-gray-500">{formatTimestamp(event.timestamp)}</p>
-        {event.metadata && Object.keys(event.metadata).length > 0 && (
-          <MetadataSummary metadata={event.metadata} />
-        )}
-      </div>
-    </div>
-  );
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString();
 }
 
 function MetadataSummary({ metadata }: { metadata: Record<string, unknown> }) {
@@ -80,23 +107,25 @@ function MetadataSummary({ metadata }: { metadata: Record<string, unknown> }) {
     <div className="mt-1.5">
       {!expanded ? (
         <button
+          type="button"
           onClick={() => setExpanded(true)}
-          className="text-xs text-gray-400 hover:text-gray-600"
+          className="text-meta text-ink-faint transition-colors hover:text-ink"
         >
           Show metadata
         </button>
       ) : (
-        <div className="rounded bg-gray-50 p-2 text-xs">
-          <div className="mb-1 flex justify-between">
-            <span className="text-gray-500">Metadata</span>
+        <div className="rounded-control border border-line bg-neutral-soft/50 p-3">
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <span className="text-meta font-medium text-ink-muted">Metadata</span>
             <button
+              type="button"
               onClick={() => setExpanded(false)}
-              className="text-gray-400 hover:text-gray-600"
+              className="text-meta text-ink-faint transition-colors hover:text-ink"
             >
               Hide
             </button>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap text-gray-600">
+          <pre className="whitespace-pre-wrap break-words font-mono text-xs text-ink-muted">
             {JSON.stringify(metadata, null, 2)}
           </pre>
         </div>
@@ -105,31 +134,83 @@ function MetadataSummary({ metadata }: { metadata: Record<string, unknown> }) {
   );
 }
 
-import { useState } from 'react';
-
-export function TimelineView({ notificationId }: { notificationId: string }) {
-  const { data: events, isLoading, isError, error, refetch } = useTimeline(notificationId);
-
-  if (isLoading) return <LoadingSpinner message="Loading timeline..." />;
-  if (isError)
-    return (
-      <ErrorState
-        message={error instanceof Error ? error.message : 'Failed to load timeline'}
-        onRetry={refetch}
-      />
-    );
-  if (!events || events.length === 0) return <EmptyState message="No events recorded yet." />;
+function TimelineItem({
+  event,
+  isLast,
+  now,
+}: {
+  event: TimelineEventResponse;
+  isLast: boolean;
+  now: number;
+}) {
+  const tone = EVENT_TONE[event.event] ?? 'neutral';
+  const label = EVENT_LABELS[event.event] ?? event.event;
+  const chip = EVENT_CHIP[event.event];
 
   return (
-    <div>
-      <h3 className="mb-4 text-sm font-semibold text-gray-900 uppercase tracking-wider">
-        Timeline
-      </h3>
-      <div className="pl-1">
-        {events.map((event, i) => (
-          <TimelineItem key={i} event={event} isLast={i === events.length - 1} />
-        ))}
+    <li className="relative flex gap-3 pb-5 last:pb-0">
+      {!isLast && (
+        <div aria-hidden="true" className="absolute left-[5.5px] top-5 h-full w-px bg-line" />
+      )}
+      <span
+        aria-hidden="true"
+        className={`mt-1 inline-block h-3 w-3 shrink-0 rounded-full ${STATUS_TONE_DOT[tone]}`}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-sm font-medium text-ink" title={event.event}>
+            {label}
+          </span>
+          {chip && (
+            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_BADGE[tone]}`}>
+              {chip}
+            </span>
+          )}
+        </div>
+        <p className="mt-0.5 text-meta text-ink-faint">
+          <time dateTime={event.timestamp} title={formatDateTime(event.timestamp)}>
+            {formatRelativeTime(event.timestamp, now)}
+          </time>
+        </p>
+        {event.metadata && Object.keys(event.metadata).length > 0 && (
+          <MetadataSummary metadata={event.metadata} />
+        )}
       </div>
-    </div>
+    </li>
+  );
+}
+
+export function TimelineView({ notificationId }: { notificationId: string }) {
+  const { data: events, isLoading, isError, refetch } = useTimeline(notificationId);
+  const now = useNow();
+
+  if (isLoading) {
+    return (
+      <div className="py-1">
+        <LoadingSkeleton rows={4} />
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="py-2">
+        <ErrorState
+          title="Unable to load the timeline"
+          message="We couldn't retrieve the delivery events for this notification."
+          onRetry={refetch}
+        />
+      </div>
+    );
+  }
+  if (!events || events.length === 0) {
+    return <EmptyState compact message="No delivery events recorded yet." />;
+  }
+
+  return (
+    <ul role="list" className="pl-1">
+      {events.map((event, i) => (
+        <TimelineItem key={i} event={event} isLast={i === events.length - 1} now={now} />
+      ))}
+    </ul>
   );
 }
