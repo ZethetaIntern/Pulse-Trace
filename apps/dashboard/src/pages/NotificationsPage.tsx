@@ -1,13 +1,21 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useNotifications } from '../hooks/useNotifications';
 import { StatusBadge, PriorityBadge, ChannelBadge, CategoryBadge } from '../components/StatusBadge';
 import { Pagination } from '../components/Pagination';
-import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader, Button } from '../components/ui';
-import type { ListNotificationsParams, NotificationStatus, Channel, Category, Priority, SortField, SortOrder } from '../types';
+import type {
+  ListNotificationsParams,
+  NotificationResponse,
+  NotificationStatus,
+  Channel,
+  Category,
+  Priority,
+  SortField,
+  SortOrder,
+} from '../types';
 
 const STATUS_OPTIONS: NotificationStatus[] = [
   'CREATED', 'QUEUED', 'PROCESSING', 'DELIVERED', 'FAILED', 'RETRY_PENDING', 'DLQ', 'SKIPPED',
@@ -16,50 +24,50 @@ const CHANNEL_OPTIONS: Channel[] = ['EMAIL', 'SMS', 'IN_APP'];
 const CATEGORY_OPTIONS: Category[] = ['TRANSACTIONAL', 'SECURITY', 'SYSTEM', 'INFORMATIONAL'];
 const PRIORITY_OPTIONS: Priority[] = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 
-function FilterBar({
-  params,
-  onChange,
-}: {
-  params: ListNotificationsParams;
-  onChange: (p: ListNotificationsParams) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-3">
-      <FilterSelect
-        label="Status"
-        value={params.status ?? ''}
-        options={STATUS_OPTIONS.map((s) => ({ value: s, label: s }))}
-        onChange={(v) => onChange({ ...params, status: (v as NotificationStatus) || undefined, page: 1 })}
-      />
-      <FilterSelect
-        label="Channel"
-        value={params.channel ?? ''}
-        options={CHANNEL_OPTIONS.map((c) => ({ value: c, label: c }))}
-        onChange={(v) => onChange({ ...params, channel: (v as Channel) || undefined, page: 1 })}
-      />
-      <FilterSelect
-        label="Category"
-        value={params.category ?? ''}
-        options={CATEGORY_OPTIONS.map((c) => ({ value: c, label: c }))}
-        onChange={(v) => onChange({ ...params, category: (v as Category) || undefined, page: 1 })}
-      />
-      <FilterSelect
-        label="Priority"
-        value={params.priority ?? ''}
-        options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
-        onChange={(v) => onChange({ ...params, priority: (v as Priority) || undefined, page: 1 })}
-      />
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => onChange({ sort: 'createdAt', order: 'desc' })}
-        className="self-end"
-      >
-        Clear filters
-      </Button>
-    </div>
-  );
+const STATUS_TAB_LABELS: Record<NotificationStatus, string> = {
+  CREATED: 'Created',
+  QUEUED: 'Queued',
+  PROCESSING: 'Processing',
+  DELIVERED: 'Delivered',
+  FAILED: 'Failed',
+  RETRY_PENDING: 'Retry Pending',
+  DLQ: 'DLQ',
+  SKIPPED: 'Skipped',
+};
+
+const STATUS_TABS: Array<{ value: NotificationStatus | 'ALL'; label: string }> = [
+  { value: 'ALL', label: 'All' },
+  ...STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_TAB_LABELS[s] })),
+];
+
+// ─── Relative time (5s tick, mirrors the shared approach used on Overview) ─────
+
+function useNow(intervalMs = 5_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
 }
+
+function formatRelativeTime(time: number | string, now: number): string {
+  const t = typeof time === 'number' ? time : Date.parse(time);
+  if (!Number.isFinite(t)) return '—';
+  const seconds = Math.max(0, Math.round((now - t) / 1000));
+  if (seconds < 45) return seconds <= 10 ? 'just now' : `${seconds}s ago`;
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString();
+}
+
+// ─── Filter select ────────────────────────────────────────────────────────────
 
 function FilterSelect({
   label,
@@ -91,45 +99,207 @@ function FilterSelect({
   );
 }
 
+// ─── Sortable column header ───────────────────────────────────────────────────
+
 function SortHeader({
   field,
   label,
   sort,
   order,
   onSort,
+  thClassName,
 }: {
   field: SortField;
   label: string;
   sort: SortField;
   order: SortOrder;
   onSort: (f: SortField) => void;
+  thClassName?: string;
 }) {
   const active = sort === field;
   return (
     <th
-      className="cursor-pointer select-none px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 hover:text-gray-700"
-      onClick={() => onSort(field)}
+      scope="col"
+      className={thClassName ?? 'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted'}
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        aria-label={`Sort by ${label}`}
+        className="inline-flex cursor-pointer select-none items-center gap-1 text-xs font-medium uppercase tracking-wider text-ink-muted transition-colors hover:text-ink"
+      >
         {label}
         {active && (
-          <span className="text-gray-900">{order === 'asc' ? '↑' : '↓'}</span>
+          <span aria-hidden="true" className="text-ink">
+            {order === 'asc' ? '↑' : '↓'}
+          </span>
         )}
-      </span>
+      </button>
     </th>
   );
 }
 
-function formatShortId(id: string): string {
-  return id.slice(0, 8) + '…';
+// ─── Notification table ───────────────────────────────────────────────────────
+
+const TH = 'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted';
+
+function NotificationsTable({
+  rows,
+  now,
+  sort,
+  order,
+  onSort,
+  onOpen,
+}: {
+  rows: NotificationResponse[];
+  now: number;
+  sort: SortField;
+  order: SortOrder;
+  onSort: (f: SortField) => void;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <table className="w-full text-sm">
+      <caption className="sr-only">Notifications</caption>
+      <thead className="border-b border-line bg-neutral-soft/40">
+        <tr>
+          <SortHeader field="status" label="Status" sort={sort} order={order} onSort={onSort} />
+          <SortHeader field="channel" label="Channel" sort={sort} order={order} onSort={onSort} />
+          <th scope="col" className={`${TH} hidden lg:table-cell`}>
+            Category
+          </th>
+          <SortHeader field="priority" label="Priority" sort={sort} order={order} onSort={onSort} />
+          <SortHeader field="createdAt" label="Created" sort={sort} order={order} onSort={onSort} />
+          <th scope="col" className={`${TH} text-right`}>
+            Action
+          </th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-line">
+        {rows.map((n) => (
+          <tr
+            key={n.id}
+            onClick={() => onOpen(n.id)}
+            className="cursor-pointer transition-colors hover:bg-neutral-soft/60"
+          >
+            <td className="whitespace-nowrap px-4 py-2.5">
+              <StatusBadge status={n.status} withDot size="sm" />
+            </td>
+            <td className="whitespace-nowrap px-4 py-2.5">
+              <ChannelBadge channel={n.channel} />
+            </td>
+            <td className="hidden whitespace-nowrap px-4 py-2.5 lg:table-cell">
+              <CategoryBadge category={n.category} />
+            </td>
+            <td className="whitespace-nowrap px-4 py-2.5">
+              <PriorityBadge priority={n.priority} />
+            </td>
+            <td
+              className="whitespace-nowrap px-4 py-2.5 text-meta text-ink-muted"
+              title={formatDate(n.createdAt)}
+            >
+              {formatRelativeTime(n.createdAt, now)}
+            </td>
+            <td className="whitespace-nowrap px-4 py-2.5 text-right">
+              <Link
+                to={`/notifications/${n.id}`}
+                aria-label={`View notification ${n.id}`}
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:underline"
+              >
+                View
+                <span aria-hidden="true">→</span>
+              </Link>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
+// ─── Notification cards (mobile) ─────────────────────────────────────────────
+
+function NotificationCards({
+  rows,
+  now,
+  onOpen,
+}: {
+  rows: NotificationResponse[];
+  now: number;
+  onOpen: (id: string) => void;
+}) {
+  return (
+    <ul role="list" className="divide-y divide-line">
+      {rows.map((n) => (
+        <li key={n.id}>
+          <button
+            type="button"
+            onClick={() => onOpen(n.id)}
+            className="block w-full px-4 py-3 text-left transition-colors hover:bg-neutral-soft/60"
+          >
+            <span className="flex items-center justify-between gap-2">
+              <StatusBadge status={n.status} withDot size="sm" />
+              <span className="text-meta text-ink-faint" title={formatDate(n.createdAt)}>
+                {formatRelativeTime(n.createdAt, now)}
+              </span>
+            </span>
+            <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <ChannelBadge channel={n.channel} />
+              <span aria-hidden="true" className="text-ink-faint">·</span>
+              <PriorityBadge priority={n.priority} />
+            </span>
+            <span className="mt-0.5 block text-meta text-ink-muted">Category: {n.category}</span>
+            <span className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary">
+              View
+              <span aria-hidden="true">→</span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
+
+// ─── Loading skeleton (table-like) ────────────────────────────────────────────
+
+function ListSkeleton() {
+  return (
+    <div
+      role="status"
+      aria-label="Loading notifications"
+      className="overflow-hidden rounded-container border border-line bg-surface"
+    >
+      <div className="flex items-center gap-3 border-b border-line bg-neutral-soft/40 px-4 py-3">
+        <div className="h-3 w-14 animate-pulse rounded bg-neutral-soft" />
+        <div className="h-3 w-16 animate-pulse rounded bg-neutral-soft" />
+        <div className="h-3 w-16 animate-pulse rounded bg-neutral-soft" />
+        <div className="h-3 w-20 animate-pulse rounded bg-neutral-soft" />
+        <div className="h-3 w-12 animate-pulse rounded bg-neutral-soft" />
+      </div>
+      {Array.from({ length: 7 }, (_, i) => (
+        <div
+          key={i}
+          className={`flex items-center justify-between gap-3 px-4 py-3 ${i < 6 ? 'border-b border-line' : ''}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-24 animate-pulse rounded-full bg-neutral-soft" />
+            <div className="h-3.5 w-14 animate-pulse rounded bg-neutral-soft" />
+            <div className="h-3.5 w-20 animate-pulse rounded bg-neutral-soft" />
+            <div className="h-3.5 w-16 animate-pulse rounded bg-neutral-soft" />
+          </div>
+          <div className="h-3 w-12 animate-pulse rounded bg-neutral-soft" />
+        </div>
+      ))}
+      <span className="sr-only">Loading notifications...</span>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function NotificationsPage() {
   const navigate = useNavigate();
+  const now = useNow();
   const [params, setParams] = useState<ListNotificationsParams>({
     page: 1,
     limit: 20,
@@ -137,7 +307,11 @@ export function NotificationsPage() {
     order: 'desc',
   });
 
-  const { data, isLoading, isError, error, refetch } = useNotifications(params);
+  const { data, isLoading, isError, refetch, isFetching, dataUpdatedAt } = useNotifications(params);
+
+  const hasActiveFilters = Boolean(
+    params.status || params.channel || params.category || params.priority,
+  );
 
   const handleSort = (field: SortField) => {
     setParams((prev) => ({
@@ -147,84 +321,154 @@ export function NotificationsPage() {
     }));
   };
 
+  const updateFilter = (patch: Partial<ListNotificationsParams>) => {
+    setParams((prev) => ({ ...prev, ...patch, page: 1 }));
+  };
+
+  const clearFilters = () => {
+    setParams({ page: 1, limit: 20, sort: 'createdAt', order: 'desc' });
+  };
+
+  const openNotification = (id: string) => {
+    navigate(`/notifications/${id}`);
+  };
+
+  const sort = params.sort ?? 'createdAt';
+  const order = params.order ?? 'desc';
   const pagination = data?.pagination;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Notifications"
-        description="Browse and filter all notifications."
+        description="Browse, filter, and investigate notification delivery."
+        actions={
+          <div className="flex items-center gap-3">
+            {dataUpdatedAt > 0 && (
+              <span className="hidden text-meta text-ink-faint sm:inline">
+                Updated {formatRelativeTime(dataUpdatedAt, now)}
+              </span>
+            )}
+            <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+        }
       />
 
-      <FilterBar params={params} onChange={setParams} />
+      <div className="rounded-card border border-line bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+          <h2 className="text-section-title text-ink">Filter notifications</h2>
+          {hasActiveFilters && (
+            <Button variant="secondary" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 px-4 py-3">
+          <FilterSelect
+            label="Channel"
+            value={params.channel ?? ''}
+            options={CHANNEL_OPTIONS.map((c) => ({ value: c, label: c }))}
+            onChange={(v) => updateFilter({ channel: (v as Channel) || undefined })}
+          />
+          <FilterSelect
+            label="Category"
+            value={params.category ?? ''}
+            options={CATEGORY_OPTIONS.map((c) => ({ value: c, label: c }))}
+            onChange={(v) => updateFilter({ category: (v as Category) || undefined })}
+          />
+          <FilterSelect
+            label="Priority"
+            value={params.priority ?? ''}
+            options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p }))}
+            onChange={(v) => updateFilter({ priority: (v as Priority) || undefined })}
+          />
+        </div>
+      </div>
 
-      {isLoading && <LoadingSpinner message="Loading notifications..." />}
+      <div
+        role="group"
+        aria-label="Filter by status"
+        className="rounded-card border border-line bg-neutral-soft/40 p-1"
+      >
+        <div className="flex flex-wrap gap-1">
+          {STATUS_TABS.map((tab) => {
+            const active = params.status === tab.value || (params.status === undefined && tab.value === 'ALL');
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                aria-pressed={active}
+                onClick={() =>
+                  updateFilter({ status: tab.value === 'ALL' ? undefined : (tab.value as NotificationStatus) })
+                }
+                className={[
+                  'inline-flex h-7 items-center whitespace-nowrap rounded-control px-2.5 text-meta font-medium transition-colors',
+                  active
+                    ? 'border border-line-strong bg-surface text-ink'
+                    : 'border border-transparent text-ink-muted hover:bg-surface hover:text-ink',
+                ].join(' ')}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {isLoading && <ListSkeleton />}
+
       {isError && (
         <ErrorState
-          message={error instanceof Error ? error.message : 'Failed to load notifications'}
+          title="Unable to load notifications"
+          message="We couldn't retrieve notifications right now."
           onRetry={refetch}
         />
-        )}
+      )}
 
       {!isLoading && !isError && data && data.items.length === 0 && (
-        <EmptyState message="No notifications match the current filters." />
+        <div className="rounded-container border border-line bg-surface">
+          <EmptyState
+            compact
+            title={hasActiveFilters ? 'No notifications match these filters' : 'No notifications yet'}
+            message={
+              hasActiveFilters
+                ? 'Try adjusting or clearing your filters.'
+                : 'Notifications will appear here once the system processes them.'
+            }
+            action={
+              hasActiveFilters ? (
+                <Button variant="secondary" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              ) : undefined
+            }
+          />
+        </div>
       )}
 
       {!isLoading && !isError && data && data.items.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <SortHeader field="createdAt" label="Created" sort={params.sort!} order={params.order!} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Status
-                  </th>
-                  <SortHeader field="channel" label="Channel" sort={params.sort!} order={params.order!} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Category
-                  </th>
-                  <SortHeader field="priority" label="Priority" sort={params.sort!} order={params.order!} onSort={handleSort} />
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    ID
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {data.items.map((n) => (
-                  <tr
-                    key={n.id}
-                    onClick={() => navigate(`/notifications/${n.id}`)}
-                    className="cursor-pointer transition-colors hover:bg-gray-50"
-                  >
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
-                      {formatDate(n.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <StatusBadge status={n.status} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <ChannelBadge channel={n.channel} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <CategoryBadge category={n.category} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <PriorityBadge priority={n.priority} />
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-gray-500">
-                      {formatShortId(n.id)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="overflow-hidden rounded-container border border-line bg-surface">
+          <div className="hidden md:block">
+            <NotificationsTable
+              rows={data.items}
+              now={now}
+              sort={sort}
+              order={order}
+              onSort={handleSort}
+              onOpen={openNotification}
+            />
+          </div>
+          <div className="md:hidden">
+            <NotificationCards rows={data.items} now={now} onOpen={openNotification} />
           </div>
           {pagination && (
             <Pagination
               page={pagination.page}
               totalPages={pagination.totalPages}
               total={pagination.total}
+              limit={pagination.limit}
               onPageChange={(p) => setParams((prev) => ({ ...prev, page: p }))}
             />
           )}
