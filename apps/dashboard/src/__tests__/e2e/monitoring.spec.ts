@@ -1,5 +1,5 @@
 /**
- * E2E test: Monitoring page loads and displays queue/worker metrics.
+ * E2E test: Monitoring page loads and displays system health, queue and worker metrics.
  */
 import { test, expect } from '@playwright/test';
 
@@ -10,39 +10,37 @@ test.describe('Monitoring Page', () => {
 
   test('should load the monitoring page', async ({ page }) => {
     await expect(page.locator('body')).toBeVisible();
-    await expect(page.locator('h1:has-text("Monitoring")')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Monitoring' })).toBeVisible();
   });
 
-  test('should show system health section', async ({ page }) => {
-    await expect(page.locator('text=System Health')).toBeVisible();
-    await expect(page.locator('text=Component Checks')).toBeVisible();
+  test('should show the overall health banner', async ({ page }) => {
+    await expect(page.getByText('All systems operational')).toBeVisible();
   });
 
-  test('should show health check items', async ({ page }) => {
-    await expect(page.locator('text=API')).toBeVisible();
-    await expect(page.locator('text=PostgreSQL')).toBeVisible();
-    await expect(page.locator('text=Redis')).toBeVisible();
-    // Check for Queue and Worker in the component checks list
-    await expect(page.locator('div[class*="space-y-0"] >> text=Queue').first()).toBeVisible();
-    await expect(page.locator('div[class*="space-y-0"] >> text=Worker').first()).toBeVisible();
+  test('should show system health components', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'System Components' })).toBeVisible();
+    await expect(page.getByText('API', { exact: true })).toBeVisible();
+    await expect(page.getByText('PostgreSQL', { exact: true })).toBeVisible();
+    await expect(page.getByText('Redis', { exact: true })).toBeVisible();
+    await expect(page.getByText('Queue', { exact: true })).toBeVisible();
+    await expect(page.getByText('Worker', { exact: true })).toBeVisible();
   });
 
   test('should show queue metrics section', async ({ page }) => {
-    await expect(page.locator('text=Queue: notifications')).toBeVisible();
-    await expect(page.locator('text=Waiting').first()).toBeVisible();
-    await expect(page.locator('text=Active').first()).toBeVisible();
-    await expect(page.locator('text=Completed').first()).toBeVisible();
-    await expect(page.locator('text=Failed').first()).toBeVisible();
-    await expect(page.locator('text=Delayed')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Queue operations' })).toBeVisible();
+    await expect(page.getByText('Queue: notifications')).toBeVisible();
+    await expect(page.getByText('Waiting').first()).toBeVisible();
+    await expect(page.getByText('Active').first()).toBeVisible();
+    await expect(page.getByText('Completed').first()).toBeVisible();
+    await expect(page.getByText('Failed').first()).toBeVisible();
+    await expect(page.getByText('Delayed', { exact: true })).toBeVisible();
   });
 
-  test('should show worker metrics section', async ({ page }) => {
-    await expect(page.locator('h3:has-text("Workers")')).toBeVisible();
-    await expect(page.locator('text=notification-worker')).toBeVisible();
-    await expect(page.locator('text=Concurrency')).toBeVisible();
-    await expect(page.locator('dt:has-text("Running")')).toBeVisible();
-    await expect(page.locator('text=Processed Total')).toBeVisible();
-    await expect(page.locator('dt:has-text("Failed Total")')).toBeVisible();
+  test('should show worker section', async ({ page }) => {
+    await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
+    await expect(page.getByText('notification-worker')).toBeVisible();
+    await expect(page.getByText('Concurrency')).toBeVisible();
+    await expect(page.getByText('Uptime', { exact: false }).first()).toBeVisible();
   });
 
   test('should have monitoring in sidebar navigation', async ({ page }) => {
@@ -50,6 +48,6 @@ test.describe('Monitoring Page', () => {
     await expect(page.locator('nav a:has-text("Monitoring")')).toBeVisible();
     await page.click('nav a:has-text("Monitoring")');
     await expect(page).toHaveURL(/\/monitoring/);
-    await expect(page.locator('h1:has-text("Monitoring")')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Monitoring' })).toBeVisible();
   });
 });

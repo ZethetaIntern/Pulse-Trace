@@ -1,22 +1,63 @@
-import { useMonitoringHealth } from '../hooks/useMonitoring';
-import { useQueueMetrics } from '../hooks/useMonitoring';
-import { useWorkerMetrics } from '../hooks/useMonitoring';
-import { LoadingSpinner } from '../components/LoadingSpinner';
+import { useEffect, useState } from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { useMonitoringHealth, useQueueMetrics, useWorkerMetrics } from '../hooks/useMonitoring';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorState } from '../components/ErrorState';
 import { StatusBadge } from '../components/StatusBadge';
-import { PageHeader, Button, StatusDot } from '../components/ui';
-import type { InfrastructureStatus } from '../components/ui/status';
+import { Button, Card, LoadingSkeleton, PageHeader, StatusDot } from '../components/ui';
+import {
+  classifyCheckStatus,
+  classifyWorkerStatus,
+  formatCheckStatus,
+  resolveStatusTone,
+} from '../components/ui/status';
+import type { StatusTone } from '../components/ui/status';
+import type {
+  MonitoringHealthResponse,
+  QueueMetricsResponse,
+  WorkerMetricsItemResponse,
+  WorkerMetricsResponse,
+} from '../types';
 
-function classifyCheckStatus(status: string): InfrastructureStatus {
-  if (status === 'ok') return 'healthy';
-  if (status === 'paused') return 'degraded';
-  if (status === 'stopped') return 'stopped';
-  return 'error';
+type HealthQuery = UseQueryResult<MonitoringHealthResponse, Error>;
+type QueueQuery = UseQueryResult<QueueMetricsResponse, Error>;
+type WorkersQuery = UseQueryResult<WorkerMetricsResponse, Error>;
+
+const TONE_TEXT: Record<StatusTone, string> = {
+  success: 'text-success-text',
+  warning: 'text-warning-text',
+  error: 'text-error-text',
+  info: 'text-info-text',
+  neutral: 'text-ink',
+};
+
+/** Ticking clock for live "Updated Xs ago" timestamps. */
+function useNow(intervalMs = 5_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return now;
 }
 
-function classifyWorkerStatus(status: string): InfrastructureStatus {
-  if (status === 'running') return 'running';
-  if (status === 'paused') return 'degraded';
-  if (status === 'stopped') return 'stopped';
+/** Relative time from real timestamps (no fabricated values). */
+function formatRelativeTime(time: number | string, now: number): string {
+  const ts = typeof time === 'string' ? new Date(time).getTime() : time;
+  const diffMs = Math.max(0, now - ts);
+  const s = Math.floor(diffMs / 1000);
+  if (s < 5) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+function classifyOverallStatus(status: string): 'healthy' | 'degraded' | 'error' {
+  if (status === 'healthy') return 'healthy';
+  if (status === 'degraded') return 'degraded';
   return 'error';
 }
 
@@ -28,278 +69,296 @@ function formatUptime(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
-function HealthCheckCard({ label, check }: { label: string; check: { status: string; latencyMs?: number } }) {
-  const isOk = check.status === 'ok';
-  const isDegraded = check.status === 'paused';
-  const isStopped = check.status === 'stopped';
-
+/** Labeled metric cell, joined by 1px hairlines inside a bordered grid. */
+function StatCell({
+  label,
+  value,
+  valueClass = 'text-ink',
+}: {
+  label: string;
+  value: string | number;
+  valueClass?: string;
+}) {
   return (
-    <div className="flex items-center justify-between border-b border-line py-2 last:border-0">
-      <div className="flex items-center gap-2">
-        <StatusDot status={classifyCheckStatus(check.status)} />
-        <span className="text-sm font-medium text-ink">{label}</span>
-      </div>
-      <div className="text-right">
-        <div className={`text-sm font-medium ${isOk ? 'text-success-text' : isDegraded || isStopped ? 'text-warning-text' : 'text-error-text'}`}>
-          {check.status === 'ok' ? 'Healthy' : check.status === 'paused' ? 'Paused' : check.status === 'stopped' ? 'Stopped' : 'Error'}
-        </div>
-        {check.latencyMs !== undefined && (
-          <div className="text-xs text-ink-muted">{check.latencyMs}ms</div>
-        )}
-      </div>
+    <div className="bg-surface px-4 py-2.5">
+      <div className="text-meta text-ink-muted">{label}</div>
+      <div className={`mt-0.5 text-base font-semibold ${valueClass}`}>{value}</div>
     </div>
   );
 }
 
-function HealthSection() {
-  const { data: health, isLoading, isError, error, refetch } = useMonitoringHealth();
+// ============================================================
+// Overall health banner
+// ============================================================
 
-  if (isLoading) {
+function HealthBanner({ health }: { health: HealthQuery }) {
+  if (health.isLoading) {
     return (
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <LoadingSpinner message="Checking system health..." />
+      <div className="rounded-container border border-line bg-surface p-4">
+        <LoadingSkeleton rows={2} />
       </div>
     );
   }
 
-  if (isError || !health) {
+  if (health.isError || !health.data) {
     return (
-      <div className="rounded-lg border border-red-200 bg-white p-5">
-        <div className="flex items-center gap-3">
-          <span className="h-3 w-3 rounded-full bg-red-500" />
-          <span className="text-sm font-medium text-red-700">Failed to load health</span>
-        </div>
-        <p className="mt-2 text-xs text-ink-muted">
-          {error instanceof Error ? error.message : 'Could not load system health'}
-        </p>
-        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-container border border-line bg-surface p-4">
+        <p className="text-sm text-ink">System health is currently unavailable.</p>
+        <Button variant="secondary" size="sm" onClick={() => health.refetch()}>
           Retry
         </Button>
       </div>
     );
   }
 
-  const overallStatus = health.status;
-  const statusColors = {
-    healthy: 'bg-success',
-    degraded: 'bg-warning',
-    unhealthy: 'bg-error',
-  };
+  const overall = classifyOverallStatus(health.data.status);
+  const tone = resolveStatusTone(overall);
+  const headline =
+    overall === 'healthy'
+      ? 'All systems operational'
+      : overall === 'degraded'
+        ? 'Some systems degraded'
+        : 'System health requires attention';
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-gray-900">System Health</h3>
-        <div className="flex items-center gap-2">
-          <span className={`h-3 w-3 rounded-full ${statusColors[overallStatus as keyof typeof statusColors] || 'bg-gray-500'}`} />
-          <span className="text-sm font-medium capitalize text-gray-900">{overallStatus}</span>
+    <div className="flex flex-col gap-3 rounded-container border border-line bg-surface p-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 items-center gap-3">
+        <StatusDot status={overall} size="md" />
+        <div className="min-w-0">
+          <p className={`text-sm font-medium ${TONE_TEXT[tone]}`}>{headline}</p>
+          <p className="truncate text-meta text-ink-muted">API · PostgreSQL · Redis · Queue · Worker</p>
         </div>
       </div>
-      <dl className="space-y-2 mb-4">
-        <div className="flex justify-between text-sm">
-          <dt className="text-gray-500">Uptime</dt>
-          <dd className="font-medium text-gray-900">{formatUptime(health.uptime)}</dd>
-        </div>
-        <div className="flex justify-between text-sm">
-          <dt className="text-gray-500">Version</dt>
-          <dd className="font-medium text-gray-900">{health.version}</dd>
-        </div>
-        <div className="flex justify-between text-sm">
-          <dt className="text-gray-500">Environment</dt>
-          <dd className="font-medium text-gray-900">{health.environment}</dd>
-        </div>
-      </dl>
-      <div className="border-t border-gray-200 pt-4">
-        <h4 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">Component Checks</h4>
-        <div className="space-y-0">
-          <HealthCheckCard label="API" check={health.checks.api} />
-          <HealthCheckCard label="PostgreSQL" check={health.checks.postgres} />
-          <HealthCheckCard label="Redis" check={health.checks.redis} />
-          <HealthCheckCard label="Queue" check={health.checks.queue} />
-          <HealthCheckCard label="Worker" check={health.checks.worker} />
-        </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <span className="rounded-full bg-neutral-soft px-2 py-0.5 text-xs font-medium text-neutral-text">
+          {health.data.environment}
+        </span>
+        <span className="text-meta text-ink-faint">Uptime {formatUptime(health.data.uptime)}</span>
       </div>
     </div>
   );
 }
 
-function QueueSection() {
-  const { data: queue, isLoading, isError, error, refetch } = useQueueMetrics();
+// ============================================================
+// System components
+// ============================================================
 
-  if (isLoading) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <LoadingSpinner message="Loading queue metrics..." />
-      </div>
-    );
-  }
-
-  if (isError || !queue) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-white p-5">
-        <div className="flex items-center gap-3">
-          <span className="h-3 w-3 rounded-full bg-red-500" />
-          <span className="text-sm font-medium text-red-700">Failed to load queue metrics</span>
-        </div>
-        <p className="mt-2 text-xs text-ink-muted">
-          {error instanceof Error ? error.message : 'Could not load queue metrics'}
-        </p>
-        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
+function ComponentCell({ label, check }: { label: string; check: { status: string; latencyMs?: number } }) {
+  const status = classifyCheckStatus(check.status);
+  const tone = resolveStatusTone(status);
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-medium text-ink">Queue: {queue.queueName}</h3>
-        <StatusBadge status={queue.isPaused ? 'degraded' : 'running'} />
+    <div className="bg-surface px-4 py-3">
+      <p className="text-meta text-ink-muted">{label}</p>
+      <div className="mt-1 flex items-center gap-1.5">
+        <StatusDot status={status} />
+        <span className={`text-sm font-medium ${TONE_TEXT[tone]}`}>{formatCheckStatus(check.status)}</span>
       </div>
-      <dl className="grid grid-cols-2 gap-4">
-        <div>
-          <dt className="text-xs text-gray-500">Waiting</dt>
-          <dd className="mt-1 text-2xl font-semibold text-gray-900">{queue.counts.waiting}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-gray-500">Active</dt>
-          <dd className="mt-1 text-2xl font-semibold text-blue-700">{queue.counts.active}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-gray-500">Completed</dt>
-          <dd className="mt-1 text-2xl font-semibold text-green-700">{queue.counts.completed}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-gray-500">Failed</dt>
-          <dd className="mt-1 text-2xl font-semibold text-red-700">{queue.counts.failed}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-gray-500">Delayed</dt>
-          <dd className="mt-1 text-2xl font-semibold text-amber-700">{queue.counts.delayed}</dd>
-        </div>
-        <div className="col-span-2">
-          <dt className="text-xs text-gray-500">Total Processed</dt>
-          <dd className="mt-1 text-lg font-medium text-gray-900">{queue.counts.completed + queue.counts.failed}</dd>
-        </div>
-      </dl>
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <p className="text-xs text-gray-500">
-          Queue-level counts. Processed/failed totals reflect all workers combined.
-        </p>
-      </div>
+      {check.latencyMs !== undefined && (
+        <p className="mt-0.5 text-meta text-ink-faint">{check.latencyMs}ms latency</p>
+      )}
     </div>
   );
 }
 
-function WorkerSection() {
-  const { data: workers, isLoading, isError, error, refetch } = useWorkerMetrics();
-
-  if (isLoading) {
-    return (
-      <div className="rounded-lg border border-gray-200 bg-white p-5">
-        <LoadingSpinner message="Loading worker metrics..." />
-      </div>
-    );
-  }
-
-  if (isError || !workers) {
-    return (
-      <div className="rounded-lg border border-red-200 bg-white p-5">
-        <div className="flex items-center gap-3">
-          <span className="h-3 w-3 rounded-full bg-red-500" />
-          <span className="text-sm font-medium text-red-700">Failed to load worker metrics</span>
-        </div>
-        <p className="mt-2 text-xs text-ink-muted">
-          {error instanceof Error ? error.message : 'Could not load worker metrics'}
-        </p>
-        <Button variant="secondary" size="sm" className="mt-3" onClick={() => refetch()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
+function SystemComponents({ health }: { health: HealthQuery }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
-      <h3 className="text-sm font-medium text-gray-900 mb-4">Workers</h3>
-      <div className="space-y-4">
-        {workers.workers.map((worker) => (
-          <div key={worker.id} className="border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-ink">{worker.name}</span>
-                <StatusBadge status={classifyWorkerStatus(worker.status)} />
-              </div>
-              <div className="text-right text-xs text-gray-500">
-                <div>PID: {worker.id.split('-').pop()}</div>
-                <div>Uptime: {formatUptime(worker.processUptimeSeconds)}</div>
+    <Card title="System Components" subtitle="Dependency health checks">
+      {health.isLoading && <LoadingSkeleton rows={5} />}
+      {health.isError && (
+        <div className="py-4">
+          <ErrorState
+            title="Unable to load system health"
+            message="Could not load dependency health."
+            onRetry={health.refetch}
+          />
+        </div>
+      )}
+      {!health.isLoading && !health.isError && health.data && (
+        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
+          <ComponentCell label="API" check={health.data.checks.api} />
+          <ComponentCell label="PostgreSQL" check={health.data.checks.postgres} />
+          <ComponentCell label="Redis" check={health.data.checks.redis} />
+          <ComponentCell label="Queue" check={health.data.checks.queue} />
+          <ComponentCell label="Worker" check={health.data.checks.worker} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ============================================================
+// Queue operations
+// ============================================================
+
+function QueueOperations({ queue }: { queue: QueueQuery }) {
+  return (
+    <Card
+      title="Queue operations"
+      subtitle={queue.data?.queueName ? `Queue: ${queue.data.queueName}` : undefined}
+      action={queue.data ? <StatusBadge status={queue.data.isPaused ? 'degraded' : 'running'} /> : undefined}
+    >
+      {queue.isLoading && <LoadingSkeleton rows={4} />}
+      {queue.isError && (
+        <div className="py-4">
+          <ErrorState
+            title="Unable to load queue metrics"
+            message="Could not load queue metrics."
+            onRetry={queue.refetch}
+          />
+        </div>
+      )}
+      {!queue.isLoading && !queue.isError && queue.data && !queue.data.queueName && (
+        <EmptyState
+          compact
+          title="No queue data available"
+          message="Queue metrics will appear once the notification queue is available."
+        />
+      )}
+      {!queue.isLoading && !queue.isError && queue.data && queue.data.queueName && (
+        <>
+          <div className="space-y-4">
+            <div>
+              <p className="mb-1.5 text-meta font-medium uppercase tracking-wide text-ink-faint">Current depth</p>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-3">
+                <StatCell label="Waiting" value={queue.data.counts.waiting} />
+                <StatCell label="Active" value={queue.data.counts.active} />
+                <StatCell label="Delayed" value={queue.data.counts.delayed} />
               </div>
             </div>
-            <dl className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <dt className="text-gray-500">Concurrency</dt>
-                <dd className="font-medium text-gray-900">{worker.concurrency}</dd>
+            <div>
+              <p className="mb-1.5 text-meta font-medium uppercase tracking-wide text-ink-faint">Cumulative totals</p>
+              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line">
+                <StatCell label="Completed" value={queue.data.counts.completed} />
+                <StatCell
+                  label="Failed"
+                  value={queue.data.counts.failed}
+                  valueClass={queue.data.counts.failed > 0 ? 'text-error-text' : 'text-ink'}
+                />
               </div>
-              <div>
-                <dt className="text-gray-500">Running</dt>
-                <dd className={`font-medium ${worker.isRunning ? 'text-green-700' : 'text-red-700'}`}>
-                  {worker.isRunning ? 'Yes' : 'No'}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Status</dt>
-                <dd className="font-medium capitalize text-gray-900">{worker.status}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Waiting</dt>
-                <dd className="font-medium text-gray-900">{worker.queueCounts.waiting}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Active</dt>
-                <dd className="font-medium text-blue-700">{worker.queueCounts.active}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Completed</dt>
-                <dd className="font-medium text-green-700">{worker.queueCounts.completed}</dd>
-              </div>
-              <div>
-                <dt className="text-gray-500">Failed</dt>
-                <dd className="font-medium text-red-700">{worker.queueCounts.failed}</dd>
-              </div>
-              <div className="col-span-3">
-                <dt className="text-gray-500">Processed Total (queue-level)</dt>
-                <dd className="font-medium text-gray-900">{worker.processedTotal}</dd>
-              </div>
-              <div className="col-span-3">
-                <dt className="text-gray-500">Failed Total (queue-level)</dt>
-                <dd className="font-medium text-red-700">{worker.failedTotal}</dd>
-              </div>
-            </dl>
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-500">
-                Processed/failed totals are queue-level aggregates, not per-worker. Uptime is process uptime.
-              </p>
             </div>
           </div>
-        ))}
-      </div>
-    </div>
+          <p className="mt-4 border-t border-line pt-3 text-meta text-ink-faint">
+            Waiting, active and delayed reflect the current queue depth. Completed and failed are cumulative totals.
+          </p>
+        </>
+      )}
+    </Card>
   );
 }
 
-export function MonitoringPage() {
+// ============================================================
+// Workers
+// ============================================================
+
+function WorkerRow({ worker }: { worker: WorkerMetricsItemResponse }) {
+  const status = classifyWorkerStatus(worker.status);
+
   return (
-    <div className="space-y-6">
+    <li className="py-3 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <StatusDot status={status} />
+          <span className="truncate font-mono text-sm text-ink">{worker.name}</span>
+          <StatusBadge status={status} size="sm" />
+        </div>
+        <span className="shrink-0 text-meta text-ink-muted">Uptime {formatUptime(worker.processUptimeSeconds)}</span>
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
+        <StatCell label="Concurrency" value={worker.concurrency} />
+        <StatCell label="Waiting" value={worker.queueCounts.waiting} />
+        <StatCell label="Active" value={worker.queueCounts.active} />
+        <StatCell label="Completed" value={worker.queueCounts.completed} />
+        <StatCell
+          label="Failed"
+          value={worker.queueCounts.failed}
+          valueClass={worker.queueCounts.failed > 0 ? 'text-error-text' : 'text-ink'}
+        />
+      </div>
+      <p className="mt-2 text-meta text-ink-faint">
+        Waiting, active, completed and failed are queue-level counts reported alongside this worker, not per-process
+        totals.
+      </p>
+    </li>
+  );
+}
+
+function WorkersSection({ workers }: { workers: WorkersQuery }) {
+  return (
+    <Card title="Workers" subtitle="Worker process status and queue snapshot">
+      {workers.isLoading && <LoadingSkeleton rows={4} />}
+      {workers.isError && (
+        <div className="py-4">
+          <ErrorState
+            title="Unable to load worker status"
+            message="Could not load worker status."
+            onRetry={workers.refetch}
+          />
+        </div>
+      )}
+      {!workers.isLoading && !workers.isError && workers.data && workers.data.workers.length === 0 && (
+        <EmptyState
+          compact
+          title="No workers reported"
+          message="No worker processes have reported metrics yet. Workers appear here once they start; this is not a failure."
+        />
+      )}
+      {!workers.isLoading && !workers.isError && workers.data && workers.data.workers.length > 0 && (
+        <ul className="divide-y divide-line">
+          {workers.data.workers.map((worker) => (
+            <WorkerRow key={worker.id} worker={worker} />
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+// ============================================================
+// Page
+// ============================================================
+
+export function MonitoringPage() {
+  const health = useMonitoringHealth();
+  const queue = useQueueMetrics();
+  const workers = useWorkerMetrics();
+  const now = useNow();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.allSettled([health.refetch(), queue.refetch(), workers.refetch()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const updatedAt = [health, queue, workers]
+    .map((query) => query.dataUpdatedAt)
+    .filter((t) => t > 0)
+    .reduce((max, t) => Math.max(max, t), 0);
+
+  const updatedLabel = updatedAt > 0 ? `Updated ${formatRelativeTime(updatedAt, now)}` : null;
+
+  return (
+    <div className="space-y-5">
       <PageHeader
         title="Monitoring"
-        description="Real-time queue and worker health metrics."
+        description="System health, queue activity, and worker status."
+        actions={
+          <div className="flex items-center gap-3">
+            {updatedLabel && <span className="text-meta text-ink-faint">{updatedLabel}</span>}
+            <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+        }
       />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <HealthSection />
-        <QueueSection />
-      </div>
-      <WorkerSection />
+      <HealthBanner health={health} />
+      <SystemComponents health={health} />
+      <QueueOperations queue={queue} />
+      <WorkersSection workers={workers} />
     </div>
   );
 }

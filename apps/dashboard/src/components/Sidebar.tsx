@@ -41,23 +41,21 @@ const navItems = [
 
 export function Sidebar() {
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-gray-200 bg-white">
-      <div className="flex h-14 items-center border-b border-gray-200 px-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-900 text-xs font-bold text-white">
-            P
-          </div>
-          <span className="text-sm font-semibold text-gray-900">PulseTrace</span>
+    <aside className="flex h-full w-14 shrink-0 flex-col border-r border-gray-200 bg-white md:w-56">
+      <div className="flex h-14 items-center justify-center border-b border-gray-200 px-1 md:justify-start md:px-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gray-900 text-xs font-bold text-white">
+          P
         </div>
+        <span className="hidden text-sm font-semibold text-gray-900 md:inline">PulseTrace</span>
       </div>
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 px-2 py-4 md:px-3">
         {navItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.to === '/'}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+              `flex items-center justify-center rounded-md px-0 py-2 text-sm font-medium transition-colors md:justify-start md:gap-3 md:px-3 ${
                 isActive
                   ? 'bg-gray-900 text-white'
                   : 'text-gray-700 hover:bg-gray-100'
@@ -65,11 +63,11 @@ export function Sidebar() {
             }
           >
             {item.icon}
-            {item.label}
+            <span className="hidden md:inline">{item.label}</span>
           </NavLink>
         ))}
       </nav>
-      <div className="border-t border-gray-200 px-4 py-3 text-xs text-gray-400">
+      <div className="hidden border-t border-gray-200 px-4 py-3 text-xs text-gray-400">
         Developer Dashboard
       </div>
     </aside>
