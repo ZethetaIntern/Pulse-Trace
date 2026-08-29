@@ -12,7 +12,7 @@ import { JsonViewer } from '../components/JsonViewer';
 import { TimelineView } from '../components/TimelineView';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
-import { Card, Button, LoadingSkeleton } from '../components/ui';
+import { Card, Button, LoadingSkeleton, PageHeader } from '../components/ui';
 import { ApiRequestError } from '../api/client';
 import type { TimelineEventResponse, NotificationStatus } from '../types';
 
@@ -442,13 +442,15 @@ export function NotificationDetailPage() {
 
       {!isLoading && !isError && data && (
         <>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <h1 className="text-page-title text-ink">Notification</h1>
+          <PageHeader
+            title={
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                Notification
                 <StatusBadge status={data.status} withDot />
-              </div>
-              <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-description text-ink-muted">
+              </span>
+            }
+            description={
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span className="font-mono text-meta text-ink-faint" title={data.id}>
                   {data.id.slice(0, 8)}…
                 </span>
@@ -459,20 +461,22 @@ export function NotificationDetailPage() {
                     {formatRelativeTime(data.createdAt, now)}
                   </time>
                 </span>
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" size="sm" onClick={() => navigate('/notifications')}>
-                <span aria-hidden="true">←</span>
-                Back to notifications
-              </Button>
-              {isReplayable(data.status) && (
-                <Button size="sm" onClick={focusReplay}>
-                  Replay notification
+              </span>
+            }
+            actions={
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" size="sm" onClick={() => navigate('/notifications')}>
+                  <span aria-hidden="true">←</span>
+                  Back to notifications
                 </Button>
-              )}
-            </div>
-          </div>
+                {isReplayable(data.status) && (
+                  <Button size="sm" onClick={focusReplay}>
+                    Replay notification
+                  </Button>
+                )}
+              </div>
+            }
+          />
 
           <section aria-label="Notification summary" className="overflow-hidden rounded-card border border-line bg-surface">
             <dl className="grid grid-cols-2 gap-px bg-line sm:grid-cols-3 lg:grid-cols-6">

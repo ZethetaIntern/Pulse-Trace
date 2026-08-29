@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 
 interface JsonViewerProps {
   data: Record<string, unknown>;
@@ -8,19 +8,23 @@ interface JsonViewerProps {
 
 export function JsonViewer({ data, label, defaultExpanded = false }: JsonViewerProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const panelId = useId();
   const isEmpty = Object.keys(data).length === 0;
 
   return (
-    <div className="rounded-lg border border-gray-200">
+    <div className="overflow-hidden rounded-card border border-line bg-surface">
       <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-gray-700 hover:bg-gray-50"
+        aria-expanded={expanded}
+        aria-controls={panelId}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-neutral-soft/60"
       >
         <span>{label}</span>
         <span className="flex items-center gap-2">
-          {isEmpty && <span className="text-xs text-gray-400">empty</span>}
+          {isEmpty && <span className="text-xs text-ink-faint">empty</span>}
           <svg
-            className={`h-4 w-4 text-gray-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            className={`h-4 w-4 text-ink-faint transition-transform ${expanded ? 'rotate-180' : ''}`}
             fill="none"
             viewBox="0 0 24 24"
             strokeWidth={2}
@@ -31,8 +35,8 @@ export function JsonViewer({ data, label, defaultExpanded = false }: JsonViewerP
         </span>
       </button>
       {expanded && !isEmpty && (
-        <div className="border-t border-gray-200 bg-gray-50 p-4">
-          <pre className="overflow-x-auto text-sm text-gray-700">
+        <div id={panelId} className="border-t border-line bg-neutral-soft/40 p-4">
+          <pre className="overflow-x-auto text-sm text-ink-muted">
             {JSON.stringify(data, null, 2)}
           </pre>
         </div>
