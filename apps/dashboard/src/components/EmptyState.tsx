@@ -11,10 +11,10 @@ interface EmptyStateProps {
 
 export function EmptyState({ message, title, icon, action, compact = false }: EmptyStateProps) {
   return (
-    <div className={`flex flex-col items-center justify-center px-4 text-center ${compact ? 'py-6' : 'py-12'}`}>
+    <div className={`flex flex-col items-center justify-center px-4 text-center ${compact ? 'py-5' : 'py-10'}`}>
       {icon ?? (
         <svg
-          className={`text-ink-faint ${compact ? 'mb-2 h-5 w-5' : 'mb-2.5 h-8 w-8'}`}
+          className={`text-ink-faint ${compact ? 'mb-1.5 h-5 w-5' : 'mb-2 h-7 w-7'}`}
           fill="none"
           viewBox="0 0 24 24"
           strokeWidth={1.5}
@@ -28,9 +28,9 @@ export function EmptyState({ message, title, icon, action, compact = false }: Em
           />
         </svg>
       )}
-      {title && <h3 className="text-section-title text-ink-muted">{title}</h3>}
-      <p className={`max-w-sm text-meta text-ink-faint ${compact ? 'mt-0.5' : 'mt-1'}`}>{message}</p>
-      {action && <div className="mt-3">{action}</div>}
+      {title && <h3 className="text-[13px] font-medium text-ink-secondary">{title}</h3>}
+      <p className={`max-w-sm text-[12px] text-ink-faint ${compact ? 'mt-0.5' : 'mt-1'}`}>{message}</p>
+      {action && <div className="mt-2.5">{action}</div>}
     </div>
   );
 }

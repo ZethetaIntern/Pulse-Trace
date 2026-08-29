@@ -3,7 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useOverview } from '../hooks/useOverview';
 import { MetricCard } from '../components/analytics/MetricCard';
-import { Card, PageHeader, Button, StatusDot, LoadingSkeleton } from '../components/ui';
+import { PageHeader, Button, StatusDot, LoadingSkeleton } from '../components/ui';
 import { classifyCheckStatus, formatCheckStatus, resolveStatusTone } from '../components/ui/status';
 import type { StatusTone } from '../components/ui/status';
 import { EmptyState } from '../components/EmptyState';
@@ -55,7 +55,6 @@ const STATUS_ACTIVITY: Record<NotificationStatus, string> = {
   SKIPPED: 'skipped',
 };
 
-/** Ticking clock for live "Updated Xs ago" timestamps. */
 function useNow(intervalMs = 5_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -65,7 +64,6 @@ function useNow(intervalMs = 5_000): number {
   return now;
 }
 
-/** Relative time from real timestamps. */
 function formatRelativeTime(time: number | string, now: number): string {
   const ts = typeof time === 'string' ? new Date(time).getTime() : time;
   const diffMs = Math.max(0, now - ts);
@@ -90,13 +88,13 @@ function sumChannelStat(channels: ChannelStatisticsResponse['channels'], key: 'd
 }
 
 // ============================================================
-// System health banner (compact)
+// System health strip (compact)
 // ============================================================
 
 function HealthBanner({ health }: { health: HealthQuery }) {
   if (health.isLoading) {
     return (
-      <div className="rounded-card border border-line bg-surface px-4 py-2.5">
+      <div className="rounded-card border border-line bg-surface px-4 py-2">
         <LoadingSkeleton rows={1} />
       </div>
     );
@@ -104,7 +102,7 @@ function HealthBanner({ health }: { health: HealthQuery }) {
 
   if (health.isError || !health.data) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2.5">
+      <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2">
         <span className="text-[13px] text-ink-muted">System health is currently unavailable.</span>
         <Button variant="secondary" size="sm" onClick={() => health.refetch()}>
           Retry
@@ -123,19 +121,19 @@ function HealthBanner({ health }: { health: HealthQuery }) {
         : 'Systems unhealthy';
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2.5">
+    <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2">
       <div className="flex min-w-0 items-center gap-2.5">
         <StatusDot status={overall} size="md" />
         <div className="min-w-0">
           <p className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{headline}</p>
-          <p className="truncate text-meta text-ink-faint">API · PostgreSQL · Redis · Queue · Worker</p>
+          <p className="truncate text-[11px] text-ink-faint">API · PostgreSQL · Redis · Queue · Worker</p>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2.5">
+      <div className="flex shrink-0 items-center gap-2">
         <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[10px] font-medium text-neutral-text">
           {health.data.environment}
         </span>
-        <Link to="/monitoring" className="text-[13px] font-medium text-primary hover:text-primary-hover transition-colors">
+        <Link to="/monitoring" className="text-[12px] font-medium text-primary hover:text-primary-hover transition-colors">
           View monitoring →
         </Link>
       </div>
@@ -144,7 +142,7 @@ function HealthBanner({ health }: { health: HealthQuery }) {
 }
 
 // ============================================================
-// KPI grid (compact)
+// KPI grid — dominant values, muted labels
 // ============================================================
 
 function StatCell({
@@ -158,7 +156,7 @@ function StatCell({
 }) {
   return (
     <div className="bg-surface px-3.5 py-2">
-      <div className="text-[11px] text-ink-muted">{label}</div>
+      <div className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">{label}</div>
       <div className={`mt-0.5 text-[15px] font-semibold ${valueClass}`}>{value}</div>
     </div>
   );
@@ -166,8 +164,8 @@ function StatCell({
 
 function KpiSkeleton() {
   return (
-    <div className="space-y-2.5">
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <div key={i} className="rounded-card border border-line bg-surface p-3.5">
             <LoadingSkeleton rows={2} />
@@ -188,7 +186,7 @@ function KpiSkeleton() {
 function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
   if (metrics.isError) {
     return (
-      <div className="rounded-card border border-line bg-surface px-4 py-12">
+      <div className="rounded-card border border-line bg-surface px-4 py-10">
         <ErrorState
           title="Unable to load metrics"
           message="Could not load notification metrics."
@@ -207,8 +205,8 @@ function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
   const channelCount = Object.keys(m.channelBreakdown).length;
 
   return (
-    <div className="space-y-2.5">
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
           compact
           label="Total Notifications"
@@ -230,6 +228,7 @@ function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
           subtitle={empty ? 'No deliveries yet' : undefined}
         />
       </div>
+      {/* Secondary metrics — compact grouped strip */}
       <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3">
         <StatCell
           label="Retries"
@@ -248,137 +247,104 @@ function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
 }
 
 // ============================================================
-// Operational snapshot
+// Operational snapshot — unified section, not separate cards
 // ============================================================
 
-function DeliveryOverview({ channels, queue }: { channels: ChannelsQuery; queue: QueueQuery }) {
-  const missing = !channels.data && !queue.data;
-  const bothFailed = channels.isError && queue.isError;
-  const someFailed = (channels.isError || queue.isError) && !bothFailed;
-
+function OperationalSnapshot({
+  channels,
+  queue,
+  health,
+}: {
+  channels: ChannelsQuery;
+  queue: QueueQuery;
+  health: HealthQuery;
+}) {
   const delivered = channels.data ? sumChannelStat(channels.data.channels, 'delivered') : null;
   const failed = channels.data ? sumChannelStat(channels.data.channels, 'failed') : null;
   const queued = queue.data ? queue.data.counts.waiting : null;
   const processing = queue.data ? queue.data.counts.active : null;
 
+  const isLoading = channels.isLoading && queue.isLoading && health.isLoading;
+  const hasError = channels.isError && queue.isError;
+
   return (
-    <Card title="Delivery Overview" subtitle="Across all channels and the notification queue">
-      {missing && bothFailed && (
-        <div className="py-5">
+    <div className="rounded-card border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <h2 className="text-section-title text-ink">Operational Snapshot</h2>
+        <Link to="/monitoring" className="text-[12px] font-medium text-primary hover:text-primary-hover transition-colors">
+          Monitoring →
+        </Link>
+      </div>
+
+      {isLoading && <div className="px-4 py-3"><LoadingSkeleton rows={3} /></div>}
+      {hasError && (
+        <div className="px-4 py-3">
           <ErrorState
-            title="Unable to load delivery overview"
+            title="Unable to load metrics"
             message="Could not load channel and queue metrics."
-            onRetry={() => {
-              channels.refetch();
-              queue.refetch();
-            }}
+            onRetry={() => { channels.refetch(); queue.refetch(); }}
           />
         </div>
       )}
-      {missing && !bothFailed && (
-        <div className="py-3">
-          <LoadingSkeleton rows={3} />
-        </div>
-      )}
-      {!missing && (
-        <>
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line">
-            <StatCell
-              label="Delivered"
-              value={delivered ?? '—'}
-              valueClass={delivered && delivered > 0 ? 'text-success-text' : 'text-ink'}
-            />
-            <StatCell
-              label="Failed"
-              value={failed ?? '—'}
-              valueClass={failed && failed > 0 ? 'text-error-text' : 'text-ink'}
-            />
+
+      {!isLoading && !hasError && (
+        <div className="divide-y divide-line">
+          {/* Delivery metrics */}
+          <div className="grid grid-cols-2 gap-px bg-line sm:grid-cols-4">
+            <StatCell label="Delivered" value={delivered ?? '—'} valueClass={delivered && delivered > 0 ? 'text-success-text' : 'text-ink'} />
+            <StatCell label="Failed" value={failed ?? '—'} valueClass={failed && failed > 0 ? 'text-error-text' : 'text-ink'} />
             <StatCell label="Queued" value={queued ?? '—'} />
             <StatCell label="Processing" value={processing ?? '—'} />
           </div>
-          {someFailed && (
-            <div className="mt-2 flex items-center justify-between text-meta text-ink-faint">
-              <span>Some metrics are temporarily unavailable.</span>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  channels.refetch();
-                  queue.refetch();
-                }}
-              >
-                Retry
-              </Button>
+
+          {/* System health rows */}
+          {health.data && (
+            <div className="px-4 py-2.5">
+              <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint">Dependency Health</p>
+              <div className="space-y-0">
+                {(['api', 'postgres', 'redis', 'queue', 'worker'] as const).map((key) => {
+                  const check = health.data!.checks[key];
+                  const classified = classifyCheckStatus(check.status);
+                  const tone = resolveStatusTone(classified);
+                  return (
+                    <div key={key} className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2">
+                        <StatusDot status={classified} />
+                        <span className="text-[13px] font-medium text-ink capitalize">{key === 'postgres' ? 'PostgreSQL' : key}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{formatCheckStatus(check.status)}</span>
+                        {check.latencyMs !== undefined && <span className="text-[11px] text-ink-faint">{check.latencyMs}ms</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
-        </>
+        </div>
       )}
-    </Card>
-  );
-}
-
-function HealthRow({ label, check }: { label: string; check: { status: string; latencyMs?: number } }) {
-  const classified = classifyCheckStatus(check.status);
-  const tone = resolveStatusTone(classified);
-
-  return (
-    <div className="flex items-center justify-between border-b border-line py-1.5 last:border-0">
-      <div className="flex items-center gap-2">
-        <StatusDot status={classified} />
-        <span className="text-[13px] font-medium text-ink">{label}</span>
-      </div>
-      <div className="text-right">
-        <div className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{formatCheckStatus(check.status)}</div>
-        {check.latencyMs !== undefined && <div className="text-[11px] text-ink-faint">{check.latencyMs}ms</div>}
-      </div>
     </div>
   );
 }
 
-function SystemComponents({ health }: { health: HealthQuery }) {
-  return (
-    <Card title="System Components" subtitle="Dependency health checks">
-      {health.isLoading && <LoadingSkeleton rows={4} />}
-      {health.isError && (
-        <div className="py-5">
-          <ErrorState
-            title="Unable to load system health"
-            message="Could not load dependency health."
-            onRetry={health.refetch}
-          />
-        </div>
-      )}
-      {!health.isLoading && !health.isError && health.data && (
-        <div className="space-y-0">
-          <HealthRow label="API" check={health.data.checks.api} />
-          <HealthRow label="PostgreSQL" check={health.data.checks.postgres} />
-          <HealthRow label="Redis" check={health.data.checks.redis} />
-          <HealthRow label="Queue" check={health.data.checks.queue} />
-          <HealthRow label="Worker" check={health.data.checks.worker} />
-        </div>
-      )}
-    </Card>
-  );
-}
-
 // ============================================================
-// Recent activity
+// Recent activity — dense event stream
 // ============================================================
 
 function RecentActivity({ notifications, now }: { notifications: NotificationsQuery; now: number }) {
   return (
-    <Card
-      title="Recent Activity"
-      subtitle="Latest notifications across all channels"
-      action={
-        <Link to="/notifications" className="text-[13px] font-medium text-primary hover:text-primary-hover transition-colors">
+    <div className="rounded-card border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <h2 className="text-section-title text-ink">Recent Activity</h2>
+        <Link to="/notifications" className="text-[12px] font-medium text-primary hover:text-primary-hover transition-colors">
           View all →
         </Link>
-      }
-    >
-      {notifications.isLoading && <LoadingSkeleton rows={4} />}
+      </div>
+
+      {notifications.isLoading && <div className="px-4 py-3"><LoadingSkeleton rows={4} /></div>}
       {notifications.isError && (
-        <div className="py-5">
+        <div className="px-4 py-3">
           <ErrorState
             title="Unable to load recent activity"
             message="Could not load recent notifications."
@@ -386,41 +352,32 @@ function RecentActivity({ notifications, now }: { notifications: NotificationsQu
           />
         </div>
       )}
-      {!notifications.isLoading &&
-        !notifications.isError &&
-        notifications.data?.items.length === 0 && (
-          <EmptyState
-            compact
-            title="No notification activity yet"
-            message="Notifications will appear here once the system processes them."
-          />
-        )}
-      {!notifications.isLoading &&
-        !notifications.isError &&
-        notifications.data &&
-        notifications.data.items.length > 0 && (
-          <ul className="divide-y divide-line">
-            {notifications.data.items.map((notification) => (
-              <li key={notification.id} className="flex items-center justify-between gap-3 py-2">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <StatusDot status={notification.status} />
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] text-ink">
-                      Notification {STATUS_ACTIVITY[notification.status]}
-                    </p>
-                    <p className="truncate text-[11px] text-ink-faint">
-                      {CHANNEL_LABEL[notification.channel]} · {PRIORITY_LABEL[notification.priority]}
-                    </p>
-                  </div>
+      {!notifications.isLoading && !notifications.isError && notifications.data?.items.length === 0 && (
+        <EmptyState compact title="No notification activity yet" message="Notifications will appear here once the system processes them." />
+      )}
+      {!notifications.isLoading && !notifications.isError && notifications.data && notifications.data.items.length > 0 && (
+        <ul className="divide-y divide-line">
+          {notifications.data.items.map((n) => (
+            <li key={n.id} className="flex items-center justify-between gap-3 px-4 py-2 transition-colors hover:bg-elevated/50">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <StatusDot status={n.status} />
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] text-ink">
+                    Notification {STATUS_ACTIVITY[n.status]}
+                  </p>
+                  <p className="truncate text-[11px] text-ink-faint">
+                    {CHANNEL_LABEL[n.channel]} · {PRIORITY_LABEL[n.priority]}
+                  </p>
                 </div>
-                <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-muted">
-                  {formatRelativeTime(notification.createdAt, now)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-    </Card>
+              </div>
+              <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-muted">
+                {formatRelativeTime(n.createdAt, now)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -454,10 +411,7 @@ export function OverviewPage() {
 
       <KpiGrid metrics={metrics} />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DeliveryOverview channels={channels} queue={queue} />
-        <SystemComponents health={health} />
-      </div>
+      <OperationalSnapshot channels={channels} queue={queue} health={health} />
 
       <RecentActivity notifications={notifications} now={now} />
     </div>

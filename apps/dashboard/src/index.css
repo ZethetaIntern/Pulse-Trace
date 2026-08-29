@@ -94,7 +94,7 @@
   /* Radius (restrained) */
   --radius-control: 6px;
   --radius-card: 8px;
-  --radius-container: 12px;
+  --radius-container: 10px;
 
   /* Shadows — subtle on dark, never glow */
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5);
@@ -114,6 +114,7 @@
     font-family: theme('fontFamily.sans');
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
   }
 
   /* Dark-native form controls */
@@ -158,11 +159,11 @@
 @layer components {
   /* Standardized form controls */
   .field-control {
-    @apply h-8 rounded-control border px-2 text-sm;
+    @apply h-8 rounded-control border px-2.5 text-[13px];
     background-color: rgb(15 15 15); /* #0F0F0F */
     border-color: rgb(var(--color-line-input));
     color: rgb(var(--color-ink));
-    @apply focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
+    @apply focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/25;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
   }
 
@@ -171,7 +172,13 @@
   }
 
   .field-label {
-    @apply text-xs font-medium;
-    color: rgb(var(--color-ink-secondary));
+    @apply text-[11px] font-medium uppercase tracking-wider;
+    color: rgb(var(--color-ink-muted));
+  }
+
+  /* Section heading — used for card titles and subsection headers */
+  .section-heading {
+    @apply text-[13px] font-semibold tracking-[-0.01em];
+    color: rgb(var(--color-ink));
   }
 }

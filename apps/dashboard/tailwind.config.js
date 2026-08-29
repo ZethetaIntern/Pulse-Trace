@@ -66,11 +66,11 @@ export default {
         card: 'var(--shadow-card)',
       },
       fontSize: {
-        'page-title': ['1.125rem', { lineHeight: '1.5rem', fontWeight: '600' }],
+        'page-title': ['1.25rem', { lineHeight: '1.75rem', fontWeight: '600', letterSpacing: '-0.02em' }],
         'section-title': ['0.8125rem', { lineHeight: '1.25rem', fontWeight: '600' }],
         description: ['0.8125rem', { lineHeight: '1.25rem' }],
         meta: ['0.6875rem', { lineHeight: '1rem' }],
-        kpi: ['1.5rem', { lineHeight: '2rem', fontWeight: '600' }],
+        kpi: ['1.75rem', { lineHeight: '2rem', fontWeight: '600', letterSpacing: '-0.02em' }],
       },
       fontFamily: {
         sans: [

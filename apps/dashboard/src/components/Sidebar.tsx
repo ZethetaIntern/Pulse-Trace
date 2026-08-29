@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { PulseTraceLogo } from './PulseTraceLogo';
 
 const navItems = [
   {
@@ -42,12 +43,15 @@ const navItems = [
 export function Sidebar() {
   return (
     <aside className="flex h-full w-12 shrink-0 flex-col border-r border-line bg-sidebar md:w-[220px]">
+      {/* Brand */}
       <div className="flex h-12 items-center justify-center border-b border-line px-1 md:justify-start md:px-4">
-        <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-[10px] font-bold text-canvas">
-          P
-        </div>
-        <span className="ml-2 hidden text-[13px] font-semibold text-ink md:inline">PulseTrace</span>
+        <PulseTraceLogo size={20} className="text-primary" />
+        <span className="ml-2.5 hidden text-[13px] font-semibold tracking-[-0.01em] text-ink md:inline">
+          PulseTrace
+        </span>
       </div>
+
+      {/* Navigation */}
       <nav className="flex-1 space-y-0.5 px-2 py-3 md:px-2.5">
         {navItems.map((item) => (
           <NavLink
@@ -55,18 +59,30 @@ export function Sidebar() {
             to={item.to}
             end={item.to === '/'}
             className={({ isActive }) =>
-              `flex items-center justify-center rounded-control px-0 py-1.5 text-[13px] font-medium transition-colors md:justify-start md:gap-2.5 md:px-2.5 ${
+              `relative flex items-center justify-center rounded-control px-0 py-[7px] text-[13px] font-medium transition-colors md:justify-start md:gap-2.5 md:px-2.5 ${
                 isActive
                   ? 'bg-elevated text-ink'
-                  : 'text-ink-muted hover:bg-elevated hover:text-ink-secondary'
+                  : 'text-ink-muted hover:bg-elevated/50 hover:text-ink-secondary'
               }`
             }
           >
-            {item.icon}
-            <span className="hidden md:inline">{item.label}</span>
+            {({ isActive }) => (
+              <>
+                {isActive && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-r bg-primary"
+                  />
+                )}
+                {item.icon}
+                <span className="hidden md:inline">{item.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
+
+      {/* Footer */}
       <div className="hidden border-t border-line px-4 py-2.5 text-[11px] text-ink-faint">
         Developer Dashboard
       </div>

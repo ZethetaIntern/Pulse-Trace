@@ -13,11 +13,11 @@ interface PageHeaderProps {
  */
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
         <h1 className="text-page-title text-ink">{title}</h1>
         {description !== undefined && (
-          <p className="mt-1 max-w-3xl text-description text-ink-muted">{description}</p>
+          <p className="mt-1 max-w-2xl text-description text-ink-muted">{description}</p>
         )}
       </div>
       {actions}

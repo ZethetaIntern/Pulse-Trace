@@ -4,7 +4,7 @@ import { useMonitoringHealth, useQueueMetrics, useWorkerMetrics } from '../hooks
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { StatusBadge } from '../components/StatusBadge';
-import { Button, Card, LoadingSkeleton, PageHeader, StatusDot } from '../components/ui';
+import { Button, LoadingSkeleton, PageHeader, StatusDot } from '../components/ui';
 import {
   classifyCheckStatus,
   classifyWorkerStatus,
@@ -31,7 +31,6 @@ const TONE_TEXT: Record<StatusTone, string> = {
   neutral: 'text-ink',
 };
 
-/** Ticking clock for live "Updated Xs ago" timestamps. */
 function useNow(intervalMs = 5_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -41,7 +40,6 @@ function useNow(intervalMs = 5_000): number {
   return now;
 }
 
-/** Relative time from real timestamps. */
 function formatRelativeTime(time: number | string, now: number): string {
   const ts = typeof time === 'string' ? new Date(time).getTime() : time;
   const diffMs = Math.max(0, now - ts);
@@ -69,59 +67,39 @@ function formatUptime(seconds: number): string {
   return `${h}h ${m}m`;
 }
 
-/** Labeled metric cell */
-function StatCell({
-  label,
-  value,
-  valueClass = 'text-ink',
-}: {
-  label: string;
-  value: string | number;
-  valueClass?: string;
-}) {
+function StatCell({ label, value, valueClass = 'text-ink' }: { label: string; value: string | number; valueClass?: string }) {
   return (
     <div className="bg-surface px-3.5 py-2">
-      <div className="text-[11px] text-ink-muted">{label}</div>
+      <div className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">{label}</div>
       <div className={`mt-0.5 text-[15px] font-semibold ${valueClass}`}>{value}</div>
     </div>
   );
 }
 
 // ============================================================
-// Overall health banner (compact)
+// Health banner — compact strip
 // ============================================================
 
 function HealthBanner({ health }: { health: HealthQuery }) {
   if (health.isLoading) {
-    return (
-      <div className="rounded-card border border-line bg-surface px-4 py-2.5">
-        <LoadingSkeleton rows={1} />
-      </div>
-    );
+    return <div className="rounded-card border border-line bg-surface px-4 py-2"><LoadingSkeleton rows={1} /></div>;
   }
 
   if (health.isError || !health.data) {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2">
         <p className="text-[13px] text-ink-muted">System health is currently unavailable.</p>
-        <Button variant="secondary" size="sm" onClick={() => health.refetch()}>
-          Retry
-        </Button>
+        <Button variant="secondary" size="sm" onClick={() => health.refetch()}>Retry</Button>
       </div>
     );
   }
 
   const overall = classifyOverallStatus(health.data.status);
   const tone = resolveStatusTone(overall);
-  const headline =
-    overall === 'healthy'
-      ? 'All systems operational'
-      : overall === 'degraded'
-        ? 'Some systems degraded'
-        : 'System health requires attention';
+  const headline = overall === 'healthy' ? 'All systems operational' : overall === 'degraded' ? 'Some systems degraded' : 'System health requires attention';
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2.5">
+    <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2">
       <div className="flex min-w-0 items-center gap-2.5">
         <StatusDot status={overall} size="md" />
         <div className="min-w-0">
@@ -130,9 +108,7 @@ function HealthBanner({ health }: { health: HealthQuery }) {
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[10px] font-medium text-neutral-text">
-          {health.data.environment}
-        </span>
+        <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[10px] font-medium text-neutral-text">{health.data.environment}</span>
         <span className="text-[11px] text-ink-faint">Uptime {formatUptime(health.data.uptime)}</span>
       </div>
     </div>
@@ -140,7 +116,7 @@ function HealthBanner({ health }: { health: HealthQuery }) {
 }
 
 // ============================================================
-// System components (compact grid)
+// System components — 5 compact cells
 // ============================================================
 
 function ComponentCell({ label, check }: { label: string; check: { status: string; latencyMs?: number } }) {
@@ -149,33 +125,27 @@ function ComponentCell({ label, check }: { label: string; check: { status: strin
 
   return (
     <div className="bg-surface px-3.5 py-2.5">
-      <p className="text-[11px] text-ink-muted">{label}</p>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">{label}</p>
       <div className="mt-0.5 flex items-center gap-1.5">
         <StatusDot status={status} />
         <span className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{formatCheckStatus(check.status)}</span>
       </div>
-      {check.latencyMs !== undefined && (
-        <p className="mt-0.5 text-[11px] text-ink-faint">{check.latencyMs}ms latency</p>
-      )}
+      {check.latencyMs !== undefined && <p className="mt-0.5 text-[11px] text-ink-faint">{check.latencyMs}ms</p>}
     </div>
   );
 }
 
 function SystemComponents({ health }: { health: HealthQuery }) {
   return (
-    <Card title="System Components" subtitle="Dependency health checks">
-      {health.isLoading && <LoadingSkeleton rows={4} />}
-      {health.isError && (
-        <div className="py-3">
-          <ErrorState
-            title="Unable to load system health"
-            message="Could not load dependency health."
-            onRetry={health.refetch}
-          />
-        </div>
-      )}
+    <div className="rounded-card border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <h2 className="text-section-title text-ink">System Components</h2>
+        <span className="text-[11px] text-ink-faint">Dependency health checks</span>
+      </div>
+      {health.isLoading && <div className="px-4 py-3"><LoadingSkeleton rows={3} /></div>}
+      {health.isError && <div className="px-4 py-3"><ErrorState title="Unable to load system health" message="Could not load dependency health." onRetry={health.refetch} /></div>}
       {!health.isLoading && !health.isError && health.data && (
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-px overflow-hidden bg-line sm:grid-cols-2 lg:grid-cols-5">
           <ComponentCell label="API" check={health.data.checks.api} />
           <ComponentCell label="PostgreSQL" check={health.data.checks.postgres} />
           <ComponentCell label="Redis" check={health.data.checks.redis} />
@@ -183,79 +153,65 @@ function SystemComponents({ health }: { health: HealthQuery }) {
           <ComponentCell label="Worker" check={health.data.checks.worker} />
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
 // ============================================================
-// Queue operations (dense)
+// Queue operations — dense metrics
 // ============================================================
 
 function QueueOperations({ queue }: { queue: QueueQuery }) {
   return (
-    <Card
-      title="Queue operations"
-      subtitle={queue.data?.queueName ? `Queue: ${queue.data.queueName}` : undefined}
-      action={queue.data ? <StatusBadge status={queue.data.isPaused ? 'degraded' : 'running'} /> : undefined}
-    >
-      {queue.isLoading && <LoadingSkeleton rows={3} />}
-      {queue.isError && (
-        <div className="py-3">
-          <ErrorState
-            title="Unable to load queue metrics"
-            message="Could not load queue metrics."
-            onRetry={queue.refetch}
-          />
+    <div className="rounded-card border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <div>
+          <h2 className="text-section-title text-ink">Queue Operations</h2>
+          {queue.data?.queueName && <p className="mt-0.5 text-[11px] text-ink-faint">Queue: {queue.data.queueName}</p>}
         </div>
-      )}
+        {queue.data && <StatusBadge status={queue.data.isPaused ? 'degraded' : 'running'} />}
+      </div>
+
+      {queue.isLoading && <div className="px-4 py-3"><LoadingSkeleton rows={3} /></div>}
+      {queue.isError && <div className="px-4 py-3"><ErrorState title="Unable to load queue metrics" message="Could not load queue metrics." onRetry={queue.refetch} /></div>}
       {!queue.isLoading && !queue.isError && queue.data && !queue.data.queueName && (
-        <EmptyState
-          compact
-          title="No queue data available"
-          message="Queue metrics will appear once the notification queue is available."
-        />
+        <EmptyState compact title="No queue data available" message="Queue metrics will appear once the notification queue is available." />
       )}
       {!queue.isLoading && !queue.isError && queue.data && queue.data.queueName && (
-        <>
-          <div className="space-y-3">
-            <div>
-              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink-faint">Current depth</p>
-              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-3">
-                <StatCell label="Waiting" value={queue.data.counts.waiting} />
-                <StatCell label="Active" value={queue.data.counts.active} />
-                <StatCell label="Delayed" value={queue.data.counts.delayed} />
-              </div>
-            </div>
-            <div>
-              <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-ink-faint">Cumulative totals</p>
-              <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line">
-                <StatCell label="Completed" value={queue.data.counts.completed} />
-                <StatCell
-                  label="Failed"
-                  value={queue.data.counts.failed}
-                  valueClass={queue.data.counts.failed > 0 ? 'text-error-text' : 'text-ink'}
-                />
-              </div>
+        <div className="divide-y divide-line">
+          <div className="px-4 py-3">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint">Current Depth</p>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line sm:grid-cols-3">
+              <StatCell label="Waiting" value={queue.data.counts.waiting} />
+              <StatCell label="Active" value={queue.data.counts.active} />
+              <StatCell label="Delayed" value={queue.data.counts.delayed} />
             </div>
           </div>
-          <p className="mt-3 border-t border-line pt-2.5 text-[11px] text-ink-faint">
-            Waiting, active and delayed reflect the current queue depth. Completed and failed are cumulative totals.
-          </p>
-        </>
+          <div className="px-4 py-3">
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint">Cumulative Totals</p>
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-control border border-line bg-line">
+              <StatCell label="Completed" value={queue.data.counts.completed} />
+              <StatCell label="Failed" value={queue.data.counts.failed} valueClass={queue.data.counts.failed > 0 ? 'text-error-text' : 'text-ink'} />
+            </div>
+          </div>
+          <div className="px-4 py-2">
+            <p className="text-[11px] text-ink-faint">Waiting, active and delayed reflect the current queue depth. Completed and failed are cumulative totals.</p>
+          </div>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }
 
 // ============================================================
-// Workers (dense status blocks)
+// Workers — dense operational rows
 // ============================================================
 
 function WorkerRow({ worker }: { worker: WorkerMetricsItemResponse }) {
   const status = classifyWorkerStatus(worker.status);
 
   return (
-    <li className="py-2.5 first:pt-0 last:pb-0">
+    <li className="py-2 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
         <div className="flex min-w-0 items-center gap-2">
           <StatusDot status={status} />
@@ -269,13 +225,9 @@ function WorkerRow({ worker }: { worker: WorkerMetricsItemResponse }) {
         <StatCell label="Waiting" value={worker.queueCounts.waiting} />
         <StatCell label="Active" value={worker.queueCounts.active} />
         <StatCell label="Completed" value={worker.queueCounts.completed} />
-        <StatCell
-          label="Failed"
-          value={worker.queueCounts.failed}
-          valueClass={worker.queueCounts.failed > 0 ? 'text-error-text' : 'text-ink'}
-        />
+        <StatCell label="Failed" value={worker.queueCounts.failed} valueClass={worker.queueCounts.failed > 0 ? 'text-error-text' : 'text-ink'} />
       </div>
-      <p className="mt-1.5 text-[11px] text-ink-faint">
+      <p className="mt-1 text-[11px] text-ink-faint">
         Waiting, active, completed and failed are queue-level counts reported alongside this worker.
       </p>
     </li>
@@ -284,32 +236,26 @@ function WorkerRow({ worker }: { worker: WorkerMetricsItemResponse }) {
 
 function WorkersSection({ workers }: { workers: WorkersQuery }) {
   return (
-    <Card title="Workers" subtitle="Worker process status and queue snapshot">
-      {workers.isLoading && <LoadingSkeleton rows={3} />}
-      {workers.isError && (
-        <div className="py-3">
-          <ErrorState
-            title="Unable to load worker status"
-            message="Could not load worker status."
-            onRetry={workers.refetch}
-          />
-        </div>
-      )}
+    <div className="rounded-card border border-line bg-surface">
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+        <h2 className="text-section-title text-ink">Workers</h2>
+        <span className="text-[11px] text-ink-faint">Worker process status and queue snapshot</span>
+      </div>
+      {workers.isLoading && <div className="px-4 py-3"><LoadingSkeleton rows={3} /></div>}
+      {workers.isError && <div className="px-4 py-3"><ErrorState title="Unable to load worker status" message="Could not load worker status." onRetry={workers.refetch} /></div>}
       {!workers.isLoading && !workers.isError && workers.data && workers.data.workers.length === 0 && (
-        <EmptyState
-          compact
-          title="No workers reported"
-          message="No worker processes have reported metrics yet."
-        />
+        <EmptyState compact title="No workers reported" message="No worker processes have reported metrics yet." />
       )}
       {!workers.isLoading && !workers.isError && workers.data && workers.data.workers.length > 0 && (
-        <ul className="divide-y divide-line">
-          {workers.data.workers.map((worker) => (
-            <WorkerRow key={worker.id} worker={worker} />
-          ))}
-        </ul>
+        <div className="divide-y divide-line px-4 py-2.5">
+          <ul className="space-y-3">
+            {workers.data.workers.map((worker) => (
+              <WorkerRow key={worker.id} worker={worker} />
+            ))}
+          </ul>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -334,7 +280,7 @@ export function MonitoringPage() {
   };
 
   const updatedAt = [health, queue, workers]
-    .map((query) => query.dataUpdatedAt)
+    .map((q) => q.dataUpdatedAt)
     .filter((t) => t > 0)
     .reduce((max, t) => Math.max(max, t), 0);
 

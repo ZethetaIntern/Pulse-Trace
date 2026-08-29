@@ -11,6 +11,8 @@ interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   padded?: boolean;
   /** Subtle elevation; off by default to keep cards flat/restrained. */
   elevated?: boolean;
+  /** Hide the border for section-style containers. */
+  borderless?: boolean;
   children: ReactNode;
 }
 
@@ -20,6 +22,7 @@ export function Card({
   action,
   padded = true,
   elevated = false,
+  borderless = false,
   className,
   children,
   ...props
@@ -29,7 +32,8 @@ export function Card({
   return (
     <div
       className={[
-        'rounded-card border border-line bg-surface',
+        'rounded-card bg-surface',
+        borderless ? '' : 'border border-line',
         elevated ? 'shadow-card' : '',
         padded ? 'p-4' : '',
         className,
@@ -44,7 +48,7 @@ export function Card({
             {title !== undefined && (
               <h3 className="truncate text-section-title text-ink">{title}</h3>
             )}
-            {subtitle !== undefined && <p className="mt-0.5 text-meta text-ink-muted">{subtitle}</p>}
+            {subtitle !== undefined && <p className="mt-0.5 text-[11px] text-ink-faint">{subtitle}</p>}
           </div>
           {action}
         </header>
