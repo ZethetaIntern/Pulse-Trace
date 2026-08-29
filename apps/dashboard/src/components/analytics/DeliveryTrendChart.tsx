@@ -15,12 +15,12 @@ interface DeliveryTrendChartProps {
   interval: string;
 }
 
-// Series colors mirror the semantic design tokens in index.css.
+// Series colors — restrained semantic palette
 const SERIES = {
-  created: { name: 'Created', color: 'rgb(37 99 235)' }, // info
-  delivered: { name: 'Delivered', color: 'rgb(22 163 74)' }, // success
-  failed: { name: 'Failed', color: 'rgb(220 38 38)' }, // error
-  retried: { name: 'Retried', color: 'rgb(217 119 6)' }, // warning
+  created: { name: 'Created', color: 'rgb(114 47 153)' }, // purple
+  delivered: { name: 'Delivered', color: 'rgb(255 195 73)' }, // gold
+  failed: { name: 'Failed', color: 'rgb(255 120 141)' }, // pink
+  retried: { name: 'Retried', color: 'rgb(255 195 73 / 0.45)' }, // gold dimmed
 } as const;
 
 function formatDate(dateStr: string, interval: string): string {
@@ -66,31 +66,39 @@ export function DeliveryTrendChart({ buckets, interval }: DeliveryTrendChartProp
         {totals.delivered} delivered, {totals.failed} failed, {totals.retried} retried.
       </figcaption>
       <div aria-hidden="true">
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={260}>
           <LineChart data={buckets} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+            <CartesianGrid stroke="#1D1D1D" strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="date"
               tickFormatter={(value) => formatDate(String(value), interval)}
-              tick={{ fontSize: 11, fill: '#6b7280' }}
+              tick={{ fontSize: 11, fill: '#737373' }}
               tickLine={false}
-              axisLine={{ stroke: '#d1d5db' }}
+              axisLine={{ stroke: '#242424' }}
               minTickGap={28}
               interval="preserveStartEnd"
             />
             <YAxis
-              tick={{ fontSize: 11, fill: '#6b7280' }}
+              tick={{ fontSize: 11, fill: '#737373' }}
               tickLine={false}
               axisLine={false}
               allowDecimals={false}
               width={48}
             />
             <Tooltip
-              cursor={{ stroke: '#d1d5db', strokeDasharray: '3 3' }}
-              contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #d1d5db' }}
+              cursor={{ stroke: '#242424', strokeDasharray: '3 3' }}
+              contentStyle={{
+                fontSize: 12,
+                borderRadius: 6,
+                border: '1px solid #303030',
+                backgroundColor: '#111111',
+                color: '#F5F5F5',
+              }}
+              labelStyle={{ color: '#F5F5F5' }}
+              itemStyle={{ color: '#A1A1A1' }}
               labelFormatter={(label) => formatFullDate(label as string | number)}
             />
-            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8, color: '#A1A1A1' }} />
             {Object.entries(SERIES).map(([key, series]) => (
               <Line
                 key={key}
@@ -98,7 +106,7 @@ export function DeliveryTrendChart({ buckets, interval }: DeliveryTrendChartProp
                 dataKey={key}
                 name={series.name}
                 stroke={series.color}
-                strokeWidth={2}
+                strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}
               />

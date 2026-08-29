@@ -8,9 +8,9 @@ interface ErrorStateProps {
 
 export function ErrorState({ message, title, onRetry }: ErrorStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+    <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
       <svg
-        className="mb-3 h-10 w-10 text-error"
+        className="mb-2 h-6 w-6 text-error"
         fill="none"
         viewBox="0 0 24 24"
         strokeWidth={1.5}
@@ -24,9 +24,9 @@ export function ErrorState({ message, title, onRetry }: ErrorStateProps) {
         />
       </svg>
       <h3 className="text-section-title text-ink">{title ?? 'Something went wrong'}</h3>
-      {message && <p className="mt-1 max-w-sm text-description text-ink-muted">{message}</p>}
+      {message && <p className="mt-0.5 max-w-sm text-meta text-ink-muted">{message}</p>}
       {onRetry && (
-        <Button variant="secondary" size="sm" className="mt-4" onClick={onRetry}>
+        <Button variant="secondary" size="sm" className="mt-3" onClick={onRetry}>
           Retry
         </Button>
       )}

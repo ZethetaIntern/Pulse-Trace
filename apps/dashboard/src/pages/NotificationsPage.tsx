@@ -40,7 +40,7 @@ const STATUS_TABS: Array<{ value: NotificationStatus | 'ALL'; label: string }> =
   ...STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_TAB_LABELS[s] })),
 ];
 
-// ─── Relative time (5s tick, mirrors the shared approach used on Overview) ─────
+// ─── Relative time ───────────────────────────────────────────
 
 function useNow(intervalMs = 5_000): number {
   const [now, setNow] = useState(() => Date.now());
@@ -67,7 +67,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-// ─── Filter select ────────────────────────────────────────────────────────────
+// ─── Filter select ──────────────────────────────────────────
 
 function FilterSelect({
   label,
@@ -101,7 +101,7 @@ function FilterSelect({
   );
 }
 
-// ─── Sortable column header ───────────────────────────────────────────────────
+// ─── Sortable column header ─────────────────────────────────
 
 function SortHeader({
   field,
@@ -122,13 +122,13 @@ function SortHeader({
   return (
     <th
       scope="col"
-      className={thClassName ?? 'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted'}
+      className={thClassName ?? 'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-ink-muted'}
     >
       <button
         type="button"
         onClick={() => onSort(field)}
         aria-label={`Sort by ${label}`}
-        className="inline-flex cursor-pointer select-none items-center gap-1 text-xs font-medium uppercase tracking-wider text-ink-muted transition-colors hover:text-ink"
+        className="inline-flex cursor-pointer select-none items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-ink-muted transition-colors hover:text-ink"
       >
         {label}
         {active && (
@@ -141,9 +141,9 @@ function SortHeader({
   );
 }
 
-// ─── Notification table ───────────────────────────────────────────────────────
+// ─── Notification table ─────────────────────────────────────
 
-const TH = 'px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-ink-muted';
+const TH = 'px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-ink-muted';
 
 function NotificationsTable({
   rows,
@@ -161,9 +161,9 @@ function NotificationsTable({
   onOpen: (id: string) => void;
 }) {
   return (
-    <table className="w-full text-sm">
+    <table className="w-full text-[13px]">
       <caption className="sr-only">Notifications</caption>
-      <thead className="border-b border-line bg-neutral-soft/40">
+      <thead className="border-b border-line">
         <tr>
           <SortHeader field="status" label="Status" sort={sort} order={order} onSort={onSort} />
           <SortHeader field="channel" label="Channel" sort={sort} order={order} onSort={onSort} />
@@ -182,31 +182,31 @@ function NotificationsTable({
           <tr
             key={n.id}
             onClick={() => onOpen(n.id)}
-            className="cursor-pointer transition-colors hover:bg-neutral-soft/60"
+            className="cursor-pointer transition-colors hover:bg-elevated"
           >
-            <td className="whitespace-nowrap px-4 py-2.5">
+            <td className="whitespace-nowrap px-3 py-2">
               <StatusBadge status={n.status} withDot size="sm" />
             </td>
-            <td className="whitespace-nowrap px-4 py-2.5">
+            <td className="whitespace-nowrap px-3 py-2">
               <ChannelBadge channel={n.channel} />
             </td>
-            <td className="hidden whitespace-nowrap px-4 py-2.5 lg:table-cell">
+            <td className="hidden whitespace-nowrap px-3 py-2 lg:table-cell">
               <CategoryBadge category={n.category} />
             </td>
-            <td className="whitespace-nowrap px-4 py-2.5">
+            <td className="whitespace-nowrap px-3 py-2">
               <PriorityBadge priority={n.priority} />
             </td>
             <td
-              className="whitespace-nowrap px-4 py-2.5 text-meta text-ink-muted"
+              className="whitespace-nowrap px-3 py-2 text-[11px] text-ink-muted"
               title={formatDate(n.createdAt)}
             >
               {formatRelativeTime(n.createdAt, now)}
             </td>
-            <td className="whitespace-nowrap px-4 py-2.5 text-right">
+            <td className="whitespace-nowrap px-3 py-2 text-right">
               <Link
                 to={`/notifications/${n.id}`}
                 aria-label={`View notification ${n.id}`}
-                className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-colors hover:underline"
+                className="inline-flex items-center gap-1 text-[13px] font-medium text-primary transition-colors hover:underline"
               >
                 View
                 <span aria-hidden="true">→</span>
@@ -219,7 +219,7 @@ function NotificationsTable({
   );
 }
 
-// ─── Notification cards (mobile) ─────────────────────────────────────────────
+// ─── Notification cards (mobile) ────────────────────────────
 
 function NotificationCards({
   rows,
@@ -237,21 +237,21 @@ function NotificationCards({
           <button
             type="button"
             onClick={() => onOpen(n.id)}
-            className="block w-full px-4 py-3 text-left transition-colors hover:bg-neutral-soft/60"
+            className="block w-full px-3 py-2.5 text-left transition-colors hover:bg-elevated"
           >
             <span className="flex items-center justify-between gap-2">
               <StatusBadge status={n.status} withDot size="sm" />
-              <span className="text-meta text-ink-faint" title={formatDate(n.createdAt)}>
+              <span className="text-[11px] text-ink-faint" title={formatDate(n.createdAt)}>
                 {formatRelativeTime(n.createdAt, now)}
               </span>
             </span>
-            <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px]">
               <ChannelBadge channel={n.channel} />
               <span aria-hidden="true" className="text-ink-faint">·</span>
               <PriorityBadge priority={n.priority} />
             </span>
-            <span className="mt-0.5 block text-meta text-ink-muted">Category: {n.category}</span>
-            <span className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary">
+            <span className="mt-0.5 block text-[11px] text-ink-muted">Category: {n.category}</span>
+            <span className="mt-1.5 inline-flex items-center gap-1 text-[13px] font-medium text-primary">
               View
               <span aria-hidden="true">→</span>
             </span>
@@ -262,7 +262,7 @@ function NotificationCards({
   );
 }
 
-// ─── Loading skeleton (table-like) ────────────────────────────────────────────
+// ─── Loading skeleton (table-like) ──────────────────────────
 
 function ListSkeleton() {
   return (
@@ -271,25 +271,25 @@ function ListSkeleton() {
       aria-label="Loading notifications"
       className="overflow-hidden rounded-container border border-line bg-surface"
     >
-      <div className="flex items-center gap-3 border-b border-line bg-neutral-soft/40 px-4 py-3">
-        <div className="h-3 w-14 animate-pulse rounded bg-neutral-soft" />
-        <div className="h-3 w-16 animate-pulse rounded bg-neutral-soft" />
-        <div className="h-3 w-16 animate-pulse rounded bg-neutral-soft" />
-        <div className="h-3 w-20 animate-pulse rounded bg-neutral-soft" />
-        <div className="h-3 w-12 animate-pulse rounded bg-neutral-soft" />
+      <div className="flex items-center gap-3 border-b border-line px-3 py-2.5">
+        <div className="h-3 w-12 animate-pulse rounded bg-elevated" />
+        <div className="h-3 w-14 animate-pulse rounded bg-elevated" />
+        <div className="h-3 w-14 animate-pulse rounded bg-elevated" />
+        <div className="h-3 w-16 animate-pulse rounded bg-elevated" />
+        <div className="h-3 w-10 animate-pulse rounded bg-elevated" />
       </div>
       {Array.from({ length: 7 }, (_, i) => (
         <div
           key={i}
-          className={`flex items-center justify-between gap-3 px-4 py-3 ${i < 6 ? 'border-b border-line' : ''}`}
+          className={`flex items-center justify-between gap-3 px-3 py-2.5 ${i < 6 ? 'border-b border-line' : ''}`}
         >
-          <div className="flex items-center gap-3">
-            <div className="h-5 w-24 animate-pulse rounded-full bg-neutral-soft" />
-            <div className="h-3.5 w-14 animate-pulse rounded bg-neutral-soft" />
-            <div className="h-3.5 w-20 animate-pulse rounded bg-neutral-soft" />
-            <div className="h-3.5 w-16 animate-pulse rounded bg-neutral-soft" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-4 w-20 animate-pulse rounded-full bg-elevated" />
+            <div className="h-3 w-12 animate-pulse rounded bg-elevated" />
+            <div className="h-3 w-16 animate-pulse rounded bg-elevated" />
+            <div className="h-3 w-14 animate-pulse rounded bg-elevated" />
           </div>
-          <div className="h-3 w-12 animate-pulse rounded bg-neutral-soft" />
+          <div className="h-3 w-10 animate-pulse rounded bg-elevated" />
         </div>
       ))}
       <span className="sr-only">Loading notifications...</span>
@@ -297,7 +297,7 @@ function ListSkeleton() {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Page ────────────────────────────────────────────────────
 
 export function NotificationsPage() {
   const navigate = useNavigate();
@@ -340,14 +340,14 @@ export function NotificationsPage() {
   const pagination = data?.pagination;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="Notifications"
         description="Browse, filter, and investigate notification delivery."
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             {dataUpdatedAt > 0 && (
-              <span className="hidden text-meta text-ink-faint sm:inline">
+              <span className="hidden text-[11px] text-ink-faint sm:inline">
                 Updated {formatRelativeTime(dataUpdatedAt, now)}
               </span>
             )}
@@ -359,7 +359,7 @@ export function NotificationsPage() {
       />
 
       <div className="rounded-card border border-line bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-3.5 py-2.5">
           <h2 className="text-section-title text-ink">Filter notifications</h2>
           {hasActiveFilters && (
             <Button variant="secondary" size="sm" onClick={clearFilters}>
@@ -367,7 +367,7 @@ export function NotificationsPage() {
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-3 px-4 py-3">
+        <div className="flex flex-wrap items-end gap-x-3.5 gap-y-2.5 px-3.5 py-2.5">
           <FilterSelect
             label="Channel"
             value={params.channel ?? ''}
@@ -392,9 +392,9 @@ export function NotificationsPage() {
       <div
         role="group"
         aria-label="Filter by status"
-        className="rounded-card border border-line bg-neutral-soft/40 p-1"
+        className="rounded-card border border-line bg-surface p-1"
       >
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-0.5">
           {STATUS_TABS.map((tab) => {
             const active = params.status === tab.value || (params.status === undefined && tab.value === 'ALL');
             return (
@@ -406,10 +406,10 @@ export function NotificationsPage() {
                   updateFilter({ status: tab.value === 'ALL' ? undefined : (tab.value as NotificationStatus) })
                 }
                 className={[
-                  'inline-flex h-7 items-center whitespace-nowrap rounded-control px-2.5 text-meta font-medium transition-colors',
+                  'inline-flex h-6.5 items-center whitespace-nowrap rounded-control px-2 text-[11px] font-medium transition-colors',
                   active
-                    ? 'border border-line-strong bg-surface text-ink'
-                    : 'border border-transparent text-ink-muted hover:bg-surface hover:text-ink',
+                    ? 'bg-elevated text-ink'
+                    : 'text-ink-muted hover:bg-elevated hover:text-ink-secondary',
                 ].join(' ')}
               >
                 {tab.label}

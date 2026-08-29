@@ -12,11 +12,10 @@ import type { TimelineEventResponse } from '../types';
  *
  * Renders the real events returned by GET /notifications/:id/timeline.
  * No events are manufactured: unknown event names fall back to a neutral
- * presentation. Friendly labels are presentation only — the raw event name is
- * kept via `title` for investigation.
+ * presentation.
  */
 
-// Real Prisma EventType vocabulary → semantic tone (restrained, navigation-safe).
+// Real Prisma EventType vocabulary → semantic tone.
 const EVENT_TONE: Record<string, StatusTone> = {
   NOTIFICATION_CREATED: 'neutral',
   REQUEST_VALIDATED: 'neutral',
@@ -104,28 +103,28 @@ function MetadataSummary({ metadata }: { metadata: Record<string, unknown> }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="mt-1.5">
+    <div className="mt-1">
       {!expanded ? (
         <button
           type="button"
           onClick={() => setExpanded(true)}
-          className="text-meta text-ink-faint transition-colors hover:text-ink"
+          className="text-meta text-ink-faint transition-colors hover:text-ink-muted"
         >
           Show metadata
         </button>
       ) : (
-        <div className="rounded-control border border-line bg-neutral-soft/50 p-3">
-          <div className="mb-1.5 flex items-center justify-between gap-3">
+        <div className="rounded-control border border-line bg-sidebar p-2.5">
+          <div className="mb-1 flex items-center justify-between gap-3">
             <span className="text-meta font-medium text-ink-muted">Metadata</span>
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="text-meta text-ink-faint transition-colors hover:text-ink"
+              className="text-meta text-ink-faint transition-colors hover:text-ink-muted"
             >
               Hide
             </button>
           </div>
-          <pre className="whitespace-pre-wrap break-words font-mono text-xs text-ink-muted">
+          <pre className="whitespace-pre-wrap break-words font-mono text-[11px] text-ink-muted">
             {JSON.stringify(metadata, null, 2)}
           </pre>
         </div>
@@ -148,21 +147,21 @@ function TimelineItem({
   const chip = EVENT_CHIP[event.event];
 
   return (
-    <li className="relative flex gap-3 pb-5 last:pb-0">
+    <li className="relative flex gap-2.5 pb-4 last:pb-0">
       {!isLast && (
-        <div aria-hidden="true" className="absolute left-[5.5px] top-5 h-full w-px bg-line" />
+        <div aria-hidden="true" className="absolute left-[4.5px] top-4 h-full w-px bg-line" />
       )}
       <span
         aria-hidden="true"
-        className={`mt-1 inline-block h-3 w-3 shrink-0 rounded-full ${STATUS_TONE_DOT[tone]}`}
+        className={`mt-1 inline-block h-2.5 w-2.5 shrink-0 rounded-full ${STATUS_TONE_DOT[tone]}`}
       />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-medium text-ink" title={event.event}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-[13px] font-medium text-ink" title={event.event}>
             {label}
           </span>
           {chip && (
-            <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_TONE_BADGE[tone]}`}>
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${STATUS_TONE_BADGE[tone]}`}>
               {chip}
             </span>
           )}

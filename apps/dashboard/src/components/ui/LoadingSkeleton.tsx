@@ -5,17 +5,16 @@ interface LoadingSkeletonProps {
 }
 
 /**
- * Subtle skeleton blocks used while content loads.
- * Announces its presence to screen readers and respects reduced motion
- * via the global prefers-reduced-motion rule in index.css.
+ * Dark skeleton blocks used while content loads.
+ * Uses dark elevated surface colors for a subtle shimmer.
  */
 export function LoadingSkeleton({ rows = 3, className }: LoadingSkeletonProps) {
   return (
-    <div className={`space-y-3 ${className ?? ''}`} role="status" aria-label="Loading">
+    <div className={`space-y-2.5 ${className ?? ''}`} role="status" aria-label="Loading">
       {Array.from({ length: rows }, (_, i) => (
         <div
           key={i}
-          className="h-4 animate-pulse rounded bg-neutral-soft"
+          className="h-3.5 animate-pulse rounded bg-elevated"
           style={i === rows - 1 ? { width: '60%' } : undefined}
         />
       ))}

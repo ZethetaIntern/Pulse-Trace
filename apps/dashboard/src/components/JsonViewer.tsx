@@ -18,13 +18,13 @@ export function JsonViewer({ data, label, defaultExpanded = false }: JsonViewerP
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
         aria-controls={panelId}
-        className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-medium text-ink transition-colors hover:bg-neutral-soft/60"
+        className="flex w-full items-center justify-between px-3.5 py-2 text-left text-[13px] font-medium text-ink transition-colors hover:bg-elevated"
       >
         <span>{label}</span>
         <span className="flex items-center gap-2">
-          {isEmpty && <span className="text-xs text-ink-faint">empty</span>}
+          {isEmpty && <span className="text-[11px] text-ink-faint">empty</span>}
           <svg
-            className={`h-4 w-4 text-ink-faint transition-transform ${expanded ? 'rotate-180' : ''}`}
+            className={`h-3.5 w-3.5 text-ink-faint transition-transform ${expanded ? 'rotate-180' : ''}`}
             fill="none"
             viewBox="0 0 24 24"
             strokeWidth={2}
@@ -35,8 +35,8 @@ export function JsonViewer({ data, label, defaultExpanded = false }: JsonViewerP
         </span>
       </button>
       {expanded && !isEmpty && (
-        <div id={panelId} className="border-t border-line bg-neutral-soft/40 p-4">
-          <pre className="overflow-x-auto text-sm text-ink-muted">
+        <div id={panelId} className="border-t border-line bg-sidebar p-3.5">
+          <pre className="overflow-x-auto text-[12px] leading-relaxed text-ink-secondary">
             {JSON.stringify(data, null, 2)}
           </pre>
         </div>

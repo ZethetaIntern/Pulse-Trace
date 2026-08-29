@@ -50,7 +50,7 @@ function useNow(intervalMs = 5_000): number {
   return now;
 }
 
-/** Relative time from real timestamps (no fabricated values). */
+/** Relative time from real timestamps. */
 function formatRelativeTime(time: number | string, now: number): string {
   const ts = typeof time === 'string' ? new Date(time).getTime() : time;
   const diffMs = Math.max(0, now - ts);
@@ -64,11 +64,6 @@ function formatRelativeTime(time: number | string, now: number): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-/**
- * The trends endpoint rejects invalid ranges with a 400 and field-level
- * details (e.g. "date range must not exceed N days"). Surface those friendly
- * messages so users can correct their selection, while preserving it.
- */
 function trendsValidationMessage(error: Error | null): string | undefined {
   if (
     error instanceof ApiRequestError &&
@@ -95,26 +90,26 @@ function StatCell({
   valueClass?: string;
 }) {
   return (
-    <div className="bg-surface px-4 py-2.5">
-      <div className="text-meta text-ink-muted">{label}</div>
-      <div className={`mt-0.5 text-base font-semibold ${valueClass}`}>{value}</div>
+    <div className="bg-surface px-3.5 py-2">
+      <div className="text-[11px] text-ink-muted">{label}</div>
+      <div className={`mt-0.5 text-[15px] font-semibold ${valueClass}`}>{value}</div>
     </div>
   );
 }
 
 function KpiSkeleton() {
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-2.5">
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="rounded-card border border-line bg-surface p-4">
+          <div key={i} className="rounded-card border border-line bg-surface p-3.5">
             <LoadingSkeleton rows={2} />
           </div>
         ))}
       </div>
       <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="bg-surface px-4 py-2.5">
+          <div key={i} className="bg-surface px-3.5 py-2">
             <LoadingSkeleton rows={1} />
           </div>
         ))}
@@ -126,7 +121,7 @@ function KpiSkeleton() {
 function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
   if (metrics.isError) {
     return (
-      <div className="rounded-card border border-line bg-surface px-4 py-16">
+      <div className="rounded-card border border-line bg-surface px-4 py-12">
         <ErrorState
           title="Unable to load analytics summary"
           message="Could not load notification metrics."
@@ -144,8 +139,8 @@ function KpiGrid({ metrics }: { metrics: MetricsQuery }) {
   const empty = m.totalNotifications === 0;
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="space-y-2.5">
+      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard
           compact
           label="Total Notifications"
@@ -206,7 +201,7 @@ function TrendsToolbar({
   onIntervalChange,
 }: TrendsToolbarProps) {
   return (
-    <div className="mb-4 flex flex-wrap items-end gap-x-4 gap-y-3">
+    <div className="mb-3 flex flex-wrap items-end gap-x-3.5 gap-y-2.5">
       <div className="flex flex-col gap-1">
         <label htmlFor="trend-from" className="field-label">
           From
@@ -257,7 +252,6 @@ interface TrendsCardProps {
   from: string;
   to: string;
   interval: TrendInterval;
-  /** Known state of underlying notifications. `undefined` = unknown (metrics failed). */
   hasNotifications: boolean | undefined;
   onFromChange: (value: string) => void;
   onToChange: (value: string) => void;
@@ -291,13 +285,13 @@ function TrendsCard({
       />
 
       {trends.isLoading && (
-        <div className="rounded-control border border-line bg-neutral-soft/30 p-4">
-          <LoadingSkeleton rows={7} />
+        <div className="rounded-control border border-line bg-elevated p-3.5">
+          <LoadingSkeleton rows={6} />
         </div>
       )}
 
       {trends.isError && (
-        <div className="py-4">
+        <div className="py-3">
           <ErrorState
             title="Unable to load delivery trends"
             message={trendsValidationMessage(trends.error) ?? 'Could not load delivery trends for the selected period.'}
@@ -346,12 +340,12 @@ function ChannelsCard({ channels }: { channels: ChannelsQuery }) {
   return (
     <Card title="Channel performance" subtitle="Delivery success by channel">
       {channels.isLoading && (
-        <div className="rounded-control border border-line bg-neutral-soft/30 p-4">
-          <LoadingSkeleton rows={5} />
+        <div className="rounded-control border border-line bg-elevated p-3.5">
+          <LoadingSkeleton rows={4} />
         </div>
       )}
       {channels.isError && (
-        <div className="py-4">
+        <div className="py-3">
           <ErrorState
             title="Unable to load channel statistics"
             message="Could not load channel statistics."
@@ -414,13 +408,13 @@ export function AnalyticsPage() {
   const updatedLabel = updatedAt > 0 ? `Updated ${formatRelativeTime(updatedAt, now)}` : null;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="Analytics"
         description="Notification metrics, delivery trends, and channel performance."
         actions={
-          <div className="flex items-center gap-3">
-            {updatedLabel && <span className="text-meta text-ink-faint">{updatedLabel}</span>}
+          <div className="flex items-center gap-2.5">
+            {updatedLabel && <span className="text-[11px] text-ink-faint">{updatedLabel}</span>}
             <Button variant="secondary" size="sm" onClick={handleRefresh} disabled={refreshing}>
               {refreshing ? 'Refreshing…' : 'Refresh'}
             </Button>

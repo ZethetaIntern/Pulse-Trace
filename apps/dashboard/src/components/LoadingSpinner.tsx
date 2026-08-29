@@ -1,9 +1,9 @@
 export function LoadingSpinner({ message }: { message?: string }) {
   return (
-    <div className="flex items-center justify-center py-12">
-      <div className="flex items-center gap-3 text-gray-500">
+    <div className="flex items-center justify-center py-10">
+      <div className="flex items-center gap-2.5 text-ink-muted">
         <svg
-          className="h-5 w-5 animate-spin"
+          className="h-4 w-4 animate-spin"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -22,7 +22,7 @@ export function LoadingSpinner({ message }: { message?: string }) {
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
           />
         </svg>
-        {message && <span className="text-sm">{message}</span>}
+        {message && <span className="text-xs">{message}</span>}
       </div>
     </div>
   );

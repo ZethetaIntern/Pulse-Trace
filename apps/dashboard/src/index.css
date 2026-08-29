@@ -3,67 +3,84 @@
 @tailwind utilities;
 
 /* ============================================================
-   PulseTrace design tokens — single source of truth
+   PulseTrace design tokens — single source of truth (dark mode)
    ============================================================
-   Tokens are CSS custom properties consumed by Tailwind through
-   the theme extension in tailwind.config.js.
+   Palette:
+     #090909  → app background
+     #0B0B0B  → sidebar
+     #111111  → card / panel surface
+     #151515  → elevated surface
+     #181818  → button hover
+     #1C1C1C  → skeleton animation
+     #1D1D1D  → chart grid
+     #1F1F1F  → table row border
+     #242424  → subtle border
+     #292929  → input border
+     #303030  → strong border
 
-   Semantic color usage:
-     success  → green   (delivered, healthy, running)
-     warning  → amber   (retrying, degraded, paused)
-     error    → red     (failed, dlq, stopped-with-error)
-     info     → blue    (queued, processing, informational)
-     neutral  → slate   (created, skipped, empty states)
+   Accent (semantic, used sparingly):
+     #FFC349  → primary / gold (CTA, active, healthy, success)
+     #FF788D  → error / pink (failed, unhealthy, destructive)
+     #722F99  → info / purple (processing, queued, informational)
 
-   Spacing uses a 4px base scale. Tailwind utilities map directly:
-     4=4px 8=8px 12=12px 16=16px 24=24px 32=32px 40=40px.
+   Text:
+     #F5F5F5  → primary
+     #A1A1A1  → secondary
+     #737373  → muted
+     #525252  → disabled
    ============================================================ */
 :root {
-  /* Surfaces */
-  --color-canvas: 249 250 251; /* page background          */
-  --color-surface: 255 255 255; /* card / panel background  */
+  color-scheme: dark;
 
-  /* Text */
-  --color-ink: 17 24 39; /* primary text              */
-  --color-ink-muted: 107 114 128; /* secondary / meta text    */
-  --color-ink-faint: 156 163 175; /* tertiary / placeholder   */
+  /* Surfaces — near-black foundation */
+  --color-canvas: 9 9 9; /* app background #090909 */
+  --color-surface: 17 17 17; /* card / panel background #111111 */
+  --color-sidebar: 11 11 11; /* sidebar #0B0B0B */
+  --color-elevated: 21 21 21; /* elevated surface #151515 */
+  --color-hover-surface: 24 24 24; /* hover state #181818 */
+
+  /* Text — neutral grays */
+  --color-ink: 245 245 245; /* primary text #F5F5F5 */
+  --color-ink-secondary: 161 161 161; /* secondary text #A1A1A1 */
+  --color-ink-muted: 115 115 115; /* muted text #737373 */
+  --color-ink-faint: 82 82 82; /* disabled / placeholder #525252 */
 
   /* Borders */
-  --color-line: 229 231 235; /* subtle dividers           */
-  --color-line-strong: 209 213 219; /* inputs, prominent edges */
+  --color-line: 36 36 36; /* subtle border #242424 */
+  --color-line-strong: 48 48 48; /* strong border #303030 */
+  --color-line-input: 41 41 41; /* input border #292929 */
 
-  /* Action / primary */
-  --color-primary: 17 24 39; /* primary button / active   */
-  --color-primary-hover: 31 41 55; /* primary hover state      */
-  --color-primary-soft: 243 244 246; /* subtle primary surface   */
+  /* Primary accent — gold */
+  --color-primary: 255 195 73; /* CTA #FFC349 */
+  --color-primary-hover: 229 175 66; /* hover gold */
+  --color-primary-soft: 36 36 36; /* subtle gold surface ~14% */
 
-  /* Semantic — success */
-  --color-success: 22 163 74;
-  --color-success-soft: 240 253 244;
-  --color-success-text: 21 128 61;
+  /* Semantic — success (gold) */
+  --color-success: 255 195 73;
+  --color-success-soft: 30 27 18; /* dark gold tint */
+  --color-success-text: 255 195 73;
 
-  /* Semantic — warning */
-  --color-warning: 217 119 6;
-  --color-warning-soft: 255 251 235;
-  --color-warning-text: 180 83 9;
+  /* Semantic — warning (gold; distinct via label/dot) */
+  --color-warning: 255 195 73;
+  --color-warning-soft: 30 27 18;
+  --color-warning-text: 255 195 73;
 
-  /* Semantic — error */
-  --color-error: 220 38 38;
-  --color-error-soft: 254 242 242;
-  --color-error-text: 185 28 28;
+  /* Semantic — error (pink) */
+  --color-error: 255 120 141;
+  --color-error-soft: 40 22 27; /* dark pink tint */
+  --color-error-text: 255 120 141;
 
-  /* Semantic — info */
-  --color-info: 37 99 235;
-  --color-info-soft: 239 246 255;
-  --color-info-text: 29 78 216;
+  /* Semantic — info (purple) */
+  --color-info: 114 47 153;
+  --color-info-soft: 22 15 28; /* dark purple tint */
+  --color-info-text: 200 155 230; /* lighter purple for readability */
 
   /* Semantic — neutral */
-  --color-neutral: 107 114 128;
-  --color-neutral-soft: 243 244 246;
-  --color-neutral-text: 75 85 99;
+  --color-neutral: 115 115 115;
+  --color-neutral-soft: 25 25 25;
+  --color-neutral-text: 161 161 161;
 
-  /* Spacing (4px base) — document the scale; Tailwind utilities
-     p-1/p-2/p-3/p-4/p-6/p-8/p-10 provide 4/8/12/16/24/32/40px. */
+  /* Spacing (4px base) */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -74,13 +91,13 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  /* Radius */
-  --radius-control: 6px; /* buttons, inputs, badges */
-  --radius-card: 8px; /* cards, panels          */
-  --radius-container: 12px; /* large surfaces          */
+  /* Radius (restrained) */
+  --radius-control: 6px;
+  --radius-card: 8px;
+  --radius-container: 12px;
 
-  /* Shadows (restrained) */
-  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  /* Shadows — subtle on dark, never glow */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.5);
 }
 
 @layer base {
@@ -99,13 +116,34 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  /* Consistent keyboard focus indicator across interactive elements. */
+  /* Dark-native form controls */
+  option {
+    color: rgb(var(--color-ink));
+    background-color: rgb(var(--color-surface));
+  }
+
+  /* Consistent keyboard focus — subtle yellow */
   :where(a[href], button, summary, [role='button'], [tabindex]:not([tabindex='-1'])):focus-visible {
-    outline: 2px solid rgb(var(--color-info));
+    outline: 2px solid rgb(var(--color-primary));
     outline-offset: 2px;
   }
 
-  /* Respect users who prefer reduced motion. */
+  /* Scrollbar styling for dark theme */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--color-line-strong));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--color-ink-muted));
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -118,14 +156,22 @@
 }
 
 @layer components {
-  /* Standardized form controls: inputs, selects, date fields. */
+  /* Standardized form controls */
   .field-control {
-    @apply h-8 rounded-control border border-line-strong bg-surface px-2 text-sm text-ink;
-    @apply focus:border-info focus:outline-none focus:ring-2 focus:ring-info/20;
+    @apply h-8 rounded-control border px-2 text-sm;
+    background-color: rgb(15 15 15); /* #0F0F0F */
+    border-color: rgb(var(--color-line-input));
+    color: rgb(var(--color-ink));
+    @apply focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
     @apply disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  .field-control::placeholder {
+    color: rgb(var(--color-ink-muted));
+  }
+
   .field-label {
-    @apply text-xs font-medium text-ink-muted;
+    @apply text-xs font-medium;
+    color: rgb(var(--color-ink-secondary));
   }
 }

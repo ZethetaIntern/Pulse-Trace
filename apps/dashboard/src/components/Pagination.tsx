@@ -50,11 +50,11 @@ function PageButton({
       aria-label={ariaLabel}
       aria-current={ariaCurrent}
       className={[
-        'inline-flex h-8 min-w-8 items-center justify-center rounded-control px-2.5 text-meta font-medium transition-colors',
+        'inline-flex h-7 min-w-7 items-center justify-center rounded-control px-2 text-[11px] font-medium transition-colors',
         'disabled:cursor-not-allowed disabled:opacity-40',
         active
-          ? 'bg-primary text-white'
-          : 'border border-line bg-surface text-ink hover:border-line-strong hover:bg-neutral-soft',
+          ? 'bg-primary text-canvas'
+          : 'bg-surface border border-line text-ink-muted hover:border-line-strong hover:text-ink',
       ].join(' ')}
     >
       {children}
@@ -70,7 +70,7 @@ export function Pagination({ page, totalPages, total, limit = 20, onPageChange }
   const pages = visiblePages(page, totalPages);
 
   return (
-    <nav aria-label="Pagination" className="border-t border-line px-4 py-3">
+    <nav aria-label="Pagination" className="border-t border-line px-4 py-2.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-meta text-ink-muted" role="status">
           Showing{' '}

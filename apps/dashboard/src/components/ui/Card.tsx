@@ -31,7 +31,7 @@ export function Card({
       className={[
         'rounded-card border border-line bg-surface',
         elevated ? 'shadow-card' : '',
-        padded ? 'p-5' : '',
+        padded ? 'p-4' : '',
         className,
       ]
         .filter(Boolean)
@@ -39,12 +39,12 @@ export function Card({
       {...props}
     >
       {hasHeader && (
-        <header className="mb-4 flex items-start justify-between gap-4">
+        <header className="mb-3 flex items-start justify-between gap-4">
           <div className="min-w-0">
             {title !== undefined && (
               <h3 className="truncate text-section-title text-ink">{title}</h3>
             )}
-            {subtitle !== undefined && <p className="mt-0.5 text-meta text-ink-faint">{subtitle}</p>}
+            {subtitle !== undefined && <p className="mt-0.5 text-meta text-ink-muted">{subtitle}</p>}
           </div>
           {action}
         </header>

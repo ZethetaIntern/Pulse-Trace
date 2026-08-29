@@ -10,8 +10,8 @@ interface StatusBadgeProps {
 }
 
 const SIZES: Record<'sm' | 'md', string> = {
-  sm: 'px-2 py-0.5 text-[11px]',
-  md: 'px-2.5 py-0.5 text-xs',
+  sm: 'px-1.5 py-0.5 text-[10px]',
+  md: 'px-2 py-0.5 text-[11px]',
 };
 
 export function StatusBadge({ status, withDot = false, size = 'md' }: StatusBadgeProps) {
@@ -20,7 +20,7 @@ export function StatusBadge({ status, withDot = false, size = 'md' }: StatusBadg
   return (
     <span
       className={[
-        'inline-flex items-center gap-1.5 rounded-full font-medium',
+        'inline-flex items-center gap-1 rounded-full font-medium',
         SIZES[size],
         STATUS_TONE_BADGE[tone],
       ].join(' ')}
@@ -42,7 +42,7 @@ export function PriorityBadge({ priority }: { priority: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[priority] ?? 'bg-neutral-soft text-neutral-text'}`}
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[priority] ?? 'bg-neutral-soft text-neutral-text'}`}
     >
       {priority}
     </span>
@@ -51,13 +51,13 @@ export function PriorityBadge({ priority }: { priority: string }) {
 
 export function ChannelBadge({ channel }: { channel: string }) {
   const styles: Record<string, string> = {
-    EMAIL: 'bg-indigo-50 text-indigo-700',
-    SMS: 'bg-teal-50 text-teal-700',
-    IN_APP: 'bg-warning-soft text-warning-text',
+    EMAIL: 'bg-info-soft text-info-text',
+    SMS: 'bg-primary-soft text-primary',
+    IN_APP: 'bg-neutral-soft text-neutral-text',
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[channel] ?? 'bg-neutral-soft text-neutral-text'}`}
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[channel] ?? 'bg-neutral-soft text-neutral-text'}`}
     >
       {channel}
     </span>
@@ -73,7 +73,7 @@ export function CategoryBadge({ category }: { category: string }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${styles[category] ?? 'bg-neutral-soft text-neutral-text'}`}
+      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[category] ?? 'bg-neutral-soft text-neutral-text'}`}
     >
       {category}
     </span>

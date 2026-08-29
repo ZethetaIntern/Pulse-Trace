@@ -30,7 +30,7 @@ function isFailureStatus(status: NotificationStatus): boolean {
   return FAILURE_STATUSES.includes(status);
 }
 
-// ─── Relative time (mirrors the shared approach used elsewhere) ───────────────
+// ─── Relative time ───────────────────────────────────────────
 
 function useNow(intervalMs = 5_000): number {
   const [now, setNow] = useState(() => Date.now());
@@ -57,7 +57,7 @@ function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString();
 }
 
-// ─── Copyable ID with accessible feedback ────────────────────────────────────
+// ─── Copyable ID ─────────────────────────────────────────────
 
 function CopyableId({ id, label }: { id: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -69,18 +69,18 @@ function CopyableId({ id, label }: { id: string; label: string }) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard unavailable (e.g. non-secure context); leave feedback off.
+      // Clipboard unavailable
     }
   };
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <code className="min-w-0 break-all font-mono text-xs text-ink-muted">{id}</code>
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <code className="min-w-0 break-all font-mono text-[11px] text-ink-muted">{id}</code>
       <button
         type="button"
         onClick={copy}
         aria-label={`Copy ${label}`}
-        className="inline-flex items-center rounded-control border border-line px-1.5 py-0.5 text-meta font-medium text-ink-muted transition-colors hover:bg-neutral-soft hover:text-ink"
+        className="inline-flex items-center rounded-control border border-line px-1.5 py-0.5 text-[10px] font-medium text-ink-muted transition-colors hover:bg-elevated hover:text-ink"
       >
         {copied ? 'Copied' : 'Copy'}
       </button>
@@ -91,7 +91,7 @@ function CopyableId({ id, label }: { id: string; label: string }) {
   );
 }
 
-// ─── Identity summary (hairline key/value strip) ─────────────────────────────
+// ─── Identity summary ───────────────────────────────────────
 
 function SummaryCell({
   label,
@@ -101,9 +101,9 @@ function SummaryCell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0 bg-surface px-4 py-3">
-      <dt className="truncate text-meta text-ink-faint">{label}</dt>
-      <dd className="mt-1 flex min-w-0 items-center">{children}</dd>
+    <div className="min-w-0 bg-surface px-3.5 py-2">
+      <dt className="truncate text-[11px] text-ink-faint">{label}</dt>
+      <dd className="mt-0.5 flex min-w-0 items-center">{children}</dd>
     </div>
   );
 }
@@ -113,25 +113,25 @@ function SummaryTime({ iso, now }: { iso: string; now: number }) {
     <time
       dateTime={iso}
       title={formatDateTime(iso)}
-      className="truncate text-sm text-ink"
+      className="truncate text-[13px] text-ink"
     >
       {formatRelativeTime(iso, now)}
     </time>
   );
 }
 
-// ─── Technical details ───────────────────────────────────────────────────────
+// ─── Technical details ──────────────────────────────────────
 
 function TechRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-meta text-ink-faint">{label}</dt>
+      <dt className="text-[11px] text-ink-faint">{label}</dt>
       <dd className="mt-0.5 min-w-0">{children}</dd>
     </div>
   );
 }
 
-// ─── Failure / retry information ─────────────────────────────────────────────
+// ─── Failure / retry information ─────────────────────────────
 
 function metadataString(metadata: Record<string, unknown> | undefined, key: string): string | undefined {
   const value = metadata?.[key];
@@ -178,23 +178,23 @@ function FailureCard({
         <StatusBadge status={status} withDot />
       </div>
       {errorMsg && (
-        <p className="mt-3 rounded-control border border-line bg-neutral-soft/50 px-3 py-2 font-mono text-xs leading-relaxed text-ink-muted">
+        <p className="mt-2 rounded-control border border-line bg-sidebar px-2.5 py-1.5 font-mono text-[11px] leading-relaxed text-ink-muted">
           {errorMsg}
         </p>
       )}
       {(attempt !== undefined || maxAttempts !== undefined) && (
-        <p className="mt-2 text-meta text-ink-muted">
+        <p className="mt-1.5 text-[11px] text-ink-muted">
           Failed attempt {attempt ?? '—'} of {maxAttempts ?? '—'}
         </p>
       )}
       {retryScheduled && (
-        <p className="mt-1 text-meta text-ink-muted">Another attempt was scheduled automatically.</p>
+        <p className="mt-0.5 text-[11px] text-ink-muted">Another attempt was scheduled automatically.</p>
       )}
     </Card>
   );
 }
 
-// ─── Replay ──────────────────────────────────────────────────────────────────
+// ─── Replay ──────────────────────────────────────────────────
 
 function ReplaySection({
   notificationId,
@@ -226,11 +226,11 @@ function ReplaySection({
       id="replay-section"
       tabIndex={-1}
       aria-label="Replay notification"
-      className="rounded-card border border-line bg-surface p-5 focus:outline-none"
+      className="rounded-card border border-line bg-surface p-4 focus:outline-none"
     >
       <h3 className="text-section-title text-ink">Replay</h3>
       {replayMutation.isSuccess && replayMutation.data && (
-        <p className="mt-3 rounded-control bg-success-soft px-3 py-2 text-sm text-success-text">
+        <p className="mt-2 rounded-control bg-success-soft px-2.5 py-1.5 text-[13px] text-success-text">
           Replay started. New notification:{' '}
           <Link
             to={`/notifications/${replayMutation.data.notificationId}`}
@@ -241,12 +241,12 @@ function ReplaySection({
         </p>
       )}
       {!replayMutation.isSuccess && !open && (
-        <Button className="mt-3" size="sm" onClick={() => setOpen(true)}>
+        <Button className="mt-2" size="sm" onClick={() => setOpen(true)}>
           Replay notification
         </Button>
       )}
       {!replayMutation.isSuccess && open && (
-        <div className="mt-3 space-y-3">
+        <div className="mt-2 space-y-2.5">
           <div>
             <label htmlFor="replay-reason" className="field-label">
               Reason (optional)
@@ -277,7 +277,7 @@ function ReplaySection({
             </Button>
           </div>
           {replayMutation.isError && (
-            <p role="alert" className="rounded-control bg-error-soft px-3 py-2 text-sm text-error-text">
+            <p role="alert" className="rounded-control bg-error-soft px-2.5 py-1.5 text-[13px] text-error-text">
               {replayMutation.error instanceof ApiRequestError
                 ? replayMutation.error.message
                 : 'Replay failed. Please try again.'}
@@ -289,7 +289,7 @@ function ReplaySection({
   );
 }
 
-// ─── Replay history ──────────────────────────────────────────────────────────
+// ─── Replay history ──────────────────────────────────────────
 
 function ReplayHistoryCard({ notificationId, now }: { notificationId: string; now: number }) {
   const { data: replays, isLoading } = useReplayHistory(notificationId);
@@ -308,9 +308,9 @@ function ReplayHistoryCard({ notificationId, now }: { notificationId: string; no
     <Card title="Replay history" subtitle="Attempts to re-deliver this notification">
       <ul role="list" className="divide-y divide-line">
         {replays.map((r) => (
-          <li key={r.replayId} className="py-3 first:pt-0 last:pb-0">
+          <li key={r.replayId} className="py-2 first:pt-0 last:pb-0">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="text-meta text-ink-faint">
+              <span className="text-[11px] text-ink-faint">
                 <time dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>
                   {formatRelativeTime(r.createdAt, now)}
                 </time>
@@ -319,14 +319,14 @@ function ReplayHistoryCard({ notificationId, now }: { notificationId: string; no
               {r.newNotificationStatus ? (
                 <StatusBadge status={r.newNotificationStatus as NotificationStatus} size="sm" />
               ) : (
-                <span className="text-meta text-ink-faint">No new notification</span>
+                <span className="text-[11px] text-ink-faint">No new notification</span>
               )}
             </div>
-            {r.reason && <p className="mt-1 text-sm text-ink">{r.reason}</p>}
+            {r.reason && <p className="mt-0.5 text-[13px] text-ink">{r.reason}</p>}
             {r.newNotificationId && (
               <Link
                 to={`/notifications/${r.newNotificationId}`}
-                className="mt-0.5 inline-flex items-center gap-1 font-mono text-xs text-primary transition-colors hover:underline"
+                className="mt-0.5 inline-flex items-center gap-1 font-mono text-[11px] text-primary transition-colors hover:underline"
               >
                 View new notification
                 <span aria-hidden="true">→</span>
@@ -339,45 +339,45 @@ function ReplayHistoryCard({ notificationId, now }: { notificationId: string; no
   );
 }
 
-// ─── Loading skeleton ────────────────────────────────────────────────────────
+// ─── Loading skeleton ────────────────────────────────────────
 
 function DetailSkeleton() {
-  const pulse = 'animate-pulse rounded bg-neutral-soft';
+  const pulse = 'animate-pulse rounded bg-elevated';
   return (
-    <div aria-busy="true" className="space-y-5">
+    <div aria-busy="true" className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-2">
-          <div className={`h-7 w-52 ${pulse}`} />
-          <div className={`h-4 w-64 ${pulse}`} />
+        <div className="space-y-1.5">
+          <div className={`h-6 w-48 ${pulse}`} />
+          <div className={`h-3.5 w-56 ${pulse}`} />
         </div>
         <div className="flex gap-2">
-          <div className={`h-8 w-36 ${pulse}`} />
-          <div className={`h-8 w-40 ${pulse}`} />
+          <div className={`h-7 w-32 ${pulse}`} />
+          <div className={`h-7 w-36 ${pulse}`} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
         {[0, 1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="bg-surface px-4 py-3">
-            <div className={`h-3 w-14 ${pulse}`} />
-            <div className={`mt-2 h-4 w-24 ${pulse}`} />
+          <div key={i} className="bg-surface px-3.5 py-2">
+            <div className={`h-3 w-12 ${pulse}`} />
+            <div className={`mt-1.5 h-3.5 w-20 ${pulse}`} />
           </div>
         ))}
       </div>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        <div className="space-y-5">
-          <div className="rounded-card border border-line bg-surface p-5">
-            <LoadingSkeleton rows={5} />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <div className="space-y-4">
+          <div className="rounded-card border border-line bg-surface p-4">
+            <LoadingSkeleton rows={4} />
           </div>
-          <div className="rounded-card border border-line bg-surface p-5">
+          <div className="rounded-card border border-line bg-surface p-4">
             <LoadingSkeleton rows={3} />
           </div>
         </div>
-        <div className="space-y-5">
-          <div className="rounded-card border border-line bg-surface p-5">
+        <div className="space-y-4">
+          <div className="rounded-card border border-line bg-surface p-4">
             <LoadingSkeleton rows={4} />
           </div>
-          <div className="rounded-card border border-line bg-surface p-5">
-            <LoadingSkeleton rows={3} />
+          <div className="rounded-card border border-line bg-surface p-4">
+            <LoadingSkeleton rows={2} />
           </div>
         </div>
       </div>
@@ -388,7 +388,7 @@ function DetailSkeleton() {
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Page ────────────────────────────────────────────────────
 
 export function NotificationDetailPage() {
   const { notificationId } = useParams<{ notificationId: string }>();
@@ -415,7 +415,7 @@ export function NotificationDetailPage() {
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {isLoading && <DetailSkeleton />}
 
       {isError && isNotFound && (
@@ -444,14 +444,14 @@ export function NotificationDetailPage() {
         <>
           <PageHeader
             title={
-              <span className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                 Notification
                 <StatusBadge status={data.status} withDot />
               </span>
             }
             description={
-              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className="font-mono text-meta text-ink-faint" title={data.id}>
+              <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                <span className="font-mono text-[11px] text-ink-faint" title={data.id}>
                   {data.id.slice(0, 8)}…
                 </span>
                 <span aria-hidden="true" className="text-ink-faint">·</span>
@@ -464,7 +464,7 @@ export function NotificationDetailPage() {
               </span>
             }
             actions={
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <Button variant="secondary" size="sm" onClick={() => navigate('/notifications')}>
                   <span aria-hidden="true">←</span>
                   Back to notifications
@@ -501,8 +501,8 @@ export function NotificationDetailPage() {
             </dl>
           </section>
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-            <div className="min-w-0 space-y-5">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+            <div className="min-w-0 space-y-4">
               <Card
                 title="Delivery lifecycle"
                 subtitle="Events recorded for this notification"
@@ -522,9 +522,9 @@ export function NotificationDetailPage() {
               </Card>
             </div>
 
-            <div className="min-w-0 space-y-5">
+            <div className="min-w-0 space-y-4">
               <Card title="Technical details" subtitle="Identifiers and timestamps">
-                <dl className="space-y-3">
+                <dl className="space-y-2.5">
                   <TechRow label="Notification ID">
                     <CopyableId id={data.id} label="notification ID" />
                   </TechRow>
@@ -535,12 +535,12 @@ export function NotificationDetailPage() {
                     <CopyableId id={data.templateId} label="template ID" />
                   </TechRow>
                   <TechRow label="Created">
-                    <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)} className="text-sm text-ink">
+                    <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)} className="text-[13px] text-ink">
                       {formatRelativeTime(data.createdAt, now)}
                     </time>
                   </TechRow>
                   <TechRow label="Updated">
-                    <time dateTime={data.updatedAt} title={formatDateTime(data.updatedAt)} className="text-sm text-ink">
+                    <time dateTime={data.updatedAt} title={formatDateTime(data.updatedAt)} className="text-[13px] text-ink">
                       {formatRelativeTime(data.updatedAt, now)}
                     </time>
                   </TechRow>

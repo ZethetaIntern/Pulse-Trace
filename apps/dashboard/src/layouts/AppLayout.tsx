@@ -6,7 +6,7 @@ export function AppLayout() {
     <div className="flex h-full bg-canvas">
       <Sidebar />
       <div className="min-w-0 flex-1 overflow-auto">
-        <main className="mx-auto w-full max-w-7xl px-6 py-8 lg:px-8">
+        <main className="mx-auto w-full max-w-7xl px-5 py-6 lg:px-6">
           <Outlet />
         </main>
       </div>
