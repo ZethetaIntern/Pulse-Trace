@@ -1,12 +1,11 @@
 /**
- * PulseTrace brand mark — envelope/notification symbol with integrated pulse waveform.
+ * PulseTrace brand mark — geometric frame with integrated pulse waveform.
  *
- * Inspired by notification infrastructure + message delivery + pulse monitoring.
- * Bold geometric construction, recognizable at 18–24px on dark backgrounds.
+ * Clean, geometric construction for recognition at 18–24px on dark backgrounds.
  *
- * - Envelope body + V-flap = messaging/delivery
- * - Notification badge with pulse mark = PulseTrace identity
- * - Pulse tick inside flap = trace/monitoring
+ * - Rounded square frame = structure / infrastructure
+ * - Pulse waveform = monitoring / trace
+ * - Gold accent dot at pulse peak = PulseTrace identity
  * - Gold accent (#FFC349) on dark sidebar (#0B0B0B)
  */
 export function PulseTraceLogo({ size = 24, className }: { size?: number; className?: string }) {
@@ -20,50 +19,28 @@ export function PulseTraceLogo({ size = 24, className }: { size?: number; classN
       className={className}
       aria-hidden="true"
     >
-      {/* ── Envelope body — bold geometric rectangle ────────── */}
+      {/* ── Geometric frame — clean rounded square ────────── */}
       <rect
         x="3"
-        y="8"
+        y="3"
         width="18"
-        height="12"
-        rx="2"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        fill="none"
+        height="18"
+        rx="4"
+        stroke="rgb(var(--color-ink))"
+        strokeWidth="1.6"
       />
 
-      {/* ── Envelope V-flap — converges at top center ───────── */}
+      {/* ── Pulse waveform — the core identity ────────────── */}
       <path
-        d="M3 8L12 15L21 8"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-
-      {/* ── Pulse tick inside flap — the "Trace" element ───── */}
-      <path
-        d="M7 10.5L9.5 8L11.5 12.5L14 9.5"
-        stroke="currentColor"
+        d="M6 12h3l1.5-3.5 1.5 7 1.5-3.5h3"
+        stroke="rgb(var(--color-ink))"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
-        opacity="0.7"
       />
 
-      {/* ── Notification badge circle — upper right ─────────── */}
-      <circle cx="19.5" cy="6" r="4" fill="currentColor" />
-
-      {/* ── Pulse mark inside badge — minimal waveform ──────── */}
-      <path
-        d="M17.5 6.2L18.8 6.2L19.3 4.5L20 7.8L20.7 5.5L21.5 6.2"
-        stroke="#0B0B0B"
-        strokeWidth="0.9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
+      {/* ── Gold accent dot at pulse peak — restrained ────── */}
+      <circle cx="10.5" cy="8.5" r="1.2" fill="rgb(var(--color-primary))" />
     </svg>
   );
 }

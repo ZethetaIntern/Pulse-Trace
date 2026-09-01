@@ -67,7 +67,7 @@ export function Sidebar() {
     <aside className="flex h-full w-12 shrink-0 flex-col border-r border-line bg-sidebar md:w-[220px]">
       {/* ── Brand Header ───────────────────────────────────────── */}
       <div className="flex h-14 items-center justify-center border-b border-line px-1 md:h-[56px] md:justify-start md:px-4">
-        <PulseTraceLogo size={22} className="text-primary" />
+        <PulseTraceLogo size={22} />
         <span className="ml-2.5 hidden text-[14px] font-semibold tracking-[-0.015em] text-ink md:inline">
           PulseTrace
         </span>
@@ -94,7 +94,7 @@ export function Sidebar() {
                 } md:h-[34px] md:justify-start md:gap-2.5 md:px-2.5 ${
                   isActive
                     ? 'bg-elevated text-ink'
-                    : 'text-ink-muted hover:bg-elevated/50 hover:text-ink-secondary'
+                    : 'text-ink-muted hover:bg-elevated/50 hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 focus-visible:ring-inset'
                 }`
               }
             >
