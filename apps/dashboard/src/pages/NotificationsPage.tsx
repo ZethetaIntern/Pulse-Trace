@@ -161,7 +161,7 @@ function NotificationsTable({
   return (
     <table className="w-full text-[13px]">
       <caption className="sr-only">Notifications</caption>
-      <thead className="border-b border-line">
+      <thead className="bg-surface border-b border-line">
         <tr>
           <SortHeader field="status" label="Status" sort={sort} order={order} onSort={onSort} />
           <SortHeader field="channel" label="Channel" sort={sort} order={order} onSort={onSort} />
@@ -323,7 +323,7 @@ export function NotificationsPage() {
   const pagination = data?.pagination;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <PageHeader
         title="Notifications"
         description="Browse, filter, and investigate notification delivery."

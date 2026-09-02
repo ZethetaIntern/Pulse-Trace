@@ -66,6 +66,7 @@ function useNow(intervalMs = 5_000): number {
 
 function formatRelativeTime(time: number | string, now: number): string {
   const ts = typeof time === 'string' ? new Date(time).getTime() : time;
+  if (!Number.isFinite(ts)) return '—';
   const diffMs = Math.max(0, now - ts);
   const s = Math.floor(diffMs / 1000);
   if (s < 5) return 'just now';
