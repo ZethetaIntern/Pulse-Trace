@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+type HeadingLevel = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
 interface EmptyStateProps {
   message: string;
   title?: string;
@@ -7,9 +9,12 @@ interface EmptyStateProps {
   action?: ReactNode;
   /** Compact presentation for tight spaces (smaller icon/padding). */
   compact?: boolean;
+  /** Heading level for the title (default h3, panel-level). */
+  headingLevel?: HeadingLevel;
 }
 
-export function EmptyState({ message, title, icon, action, compact = false }: EmptyStateProps) {
+export function EmptyState({ message, title, icon, action, compact = false, headingLevel = 'h3' }: EmptyStateProps) {
+  const Heading = headingLevel;
   return (
     <div className={`flex flex-col items-center justify-center px-4 text-center ${compact ? 'py-5' : 'py-10'}`}>
       {icon ?? (
@@ -28,7 +33,7 @@ export function EmptyState({ message, title, icon, action, compact = false }: Em
           />
         </svg>
       )}
-      {title && <h3 className="text-[13px] font-medium text-ink-secondary">{title}</h3>}
+      {title && <Heading className="text-[13px] font-medium text-ink-secondary">{title}</Heading>}
       <p className={`max-w-sm text-[12px] text-ink-faint ${compact ? 'mt-0.5' : 'mt-1'}`}>{message}</p>
       {action && <div className="mt-2.5">{action}</div>}
     </div>

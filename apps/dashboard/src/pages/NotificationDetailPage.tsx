@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,6 +14,7 @@ import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { Card, Button, LoadingSkeleton, PageHeader } from '../components/ui';
 import { ApiRequestError } from '../api/client';
+import { useNow, formatRelativeTimePrecise, formatDateTime } from '../lib/time';
 import type { TimelineEventResponse, NotificationStatus } from '../types';
 
 const REPLAYABLE_STATUSES: NotificationStatus[] = ['DELIVERED', 'FAILED', 'RETRY_PENDING', 'DLQ', 'SKIPPED'];
@@ -25,31 +26,6 @@ function isReplayable(status: NotificationStatus): boolean {
 
 function isFailureStatus(status: NotificationStatus): boolean {
   return FAILURE_STATUSES.includes(status);
-}
-
-function useNow(intervalMs = 5_000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
-
-function formatRelativeTime(time: number | string, now: number): string {
-  const t = typeof time === 'number' ? time : Date.parse(time);
-  if (!Number.isFinite(t)) return '—';
-  const seconds = Math.max(0, Math.round((now - t) / 1000));
-  if (seconds < 45) return seconds <= 10 ? 'just now' : `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString();
 }
 
 // ─── Copyable ID ─────────────────────────────────────────────
@@ -98,7 +74,7 @@ function SummaryCell({ label, children }: { label: string; children: React.React
 function SummaryTime({ iso, now }: { iso: string; now: number }) {
   return (
     <time dateTime={iso} title={formatDateTime(iso)} className="truncate text-[13px] text-ink">
-      {formatRelativeTime(iso, now)}
+      {formatRelativeTimePrecise(iso, now)}
     </time>
   );
 }
@@ -230,7 +206,7 @@ function ReplayHistoryCard({ notificationId, now }: { notificationId: string; no
           <li key={r.replayId} className="py-2 first:pt-0 last:pb-0">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-[10px] text-ink-faint">
-                <time dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>{formatRelativeTime(r.createdAt, now)}</time>
+                <time dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>{formatRelativeTimePrecise(r.createdAt, now)}</time>
                 {r.triggeredBy && <span> · {r.triggeredBy}</span>}
               </span>
               {r.newNotificationStatus ? <StatusBadge status={r.newNotificationStatus as NotificationStatus} size="sm" /> : <span className="text-[10px] text-ink-faint">No new notification</span>}
@@ -273,15 +249,10 @@ function DetailSkeleton() {
         ))}
       </div>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        <div className="space-y-4">
-          <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={4} /></div>
-          <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={3} /></div>
-        </div>
-        <div className="space-y-4">
-          <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={4} /></div>
-          <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={2} /></div>
-        </div>
+        <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={4} /></div>
+        <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={4} /></div>
       </div>
+      <div className="rounded-card border border-line bg-surface p-4"><LoadingSkeleton rows={3} /></div>
       <span className="sr-only" role="status">Loading notification…</span>
     </div>
   );
@@ -319,14 +290,14 @@ export function NotificationDetailPage() {
 
       {isError && isNotFound && (
         <div className="rounded-card border border-line bg-surface">
-          <EmptyState title="Notification not found" message="This notification may have been deleted or the ID may be invalid."
+          <EmptyState headingLevel="h1" title="Notification not found" message="This notification may have been deleted or the ID may be invalid."
             action={<Button variant="secondary" size="sm" onClick={() => navigate('/notifications')}>Back to notifications</Button>}
           />
         </div>
       )}
 
       {isError && !isNotFound && (
-        <ErrorState title="Unable to load notification" message="We couldn't retrieve this notification right now." onRetry={refetch} />
+        <ErrorState headingLevel="h1" title="Unable to load notification" message="We couldn't retrieve this notification right now." onRetry={refetch} />
       )}
 
       {!isLoading && !isError && data && (
@@ -344,7 +315,7 @@ export function NotificationDetailPage() {
                 <span aria-hidden="true" className="text-ink-faint">·</span>
                 <span>
                   Created{' '}
-                  <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)}>{formatRelativeTime(data.createdAt, now)}</time>
+                  <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)}>{formatRelativeTimePrecise(data.createdAt, now)}</time>
                 </span>
               </span>
             }
@@ -360,7 +331,7 @@ export function NotificationDetailPage() {
             }
           />
 
-          {/* Summary strip */}
+          {/* Notification Identity / Status */}
           <section aria-label="Notification summary" className="overflow-hidden rounded-card border border-line bg-surface">
             <dl className="grid grid-cols-2 gap-px bg-line sm:grid-cols-3 lg:grid-cols-6">
               <SummaryCell label="Status"><StatusBadge status={data.status} size="sm" /></SummaryCell>
@@ -372,38 +343,43 @@ export function NotificationDetailPage() {
             </dl>
           </section>
 
-          {/* Two-column layout */}
+          {/* Delivery Lifecycle + Technical Details (two-column on desktop) */}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-            <div className="min-w-0 space-y-4">
-              <Card title="Delivery lifecycle" subtitle="Events recorded for this notification" className="overflow-hidden">
-                <TimelineView notificationId={id} />
-              </Card>
-              <Card title="Payload" subtitle="The JSON sent to the channel for this notification">
-                <JsonViewer data={data.payload} label="Payload JSON" defaultExpanded={Object.keys(data.payload).length > 0} />
-              </Card>
-            </div>
-            <div className="min-w-0 space-y-4">
-              <Card title="Technical details" subtitle="Identifiers and timestamps">
-                <dl className="space-y-2">
-                  <TechRow label="Notification ID"><CopyableId id={data.id} label="notification ID" /></TechRow>
-                  <TechRow label="User ID"><CopyableId id={data.userId} label="user ID" /></TechRow>
-                  <TechRow label="Template ID"><CopyableId id={data.templateId} label="template ID" /></TechRow>
-                  <TechRow label="Created">
-                    <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)} className="text-[13px] text-ink">
-                      {formatRelativeTime(data.createdAt, now)}
-                    </time>
-                  </TechRow>
-                  <TechRow label="Updated">
-                    <time dateTime={data.updatedAt} title={formatDateTime(data.updatedAt)} className="text-[13px] text-ink">
-                      {formatRelativeTime(data.updatedAt, now)}
-                    </time>
-                  </TechRow>
-                </dl>
-              </Card>
-              <FailureCard status={data.status} events={timelineEvents} />
-              <ReplaySection notificationId={id} status={data.status} onReplayed={handleReplayed} />
-              <ReplayHistoryCard notificationId={id} now={now} />
-            </div>
+            <Card title="Delivery lifecycle" subtitle="Events recorded for this notification" className="overflow-hidden min-w-0">
+              <TimelineView notificationId={id} />
+            </Card>
+            <Card title="Technical details" subtitle="Identifiers and timestamps" className="min-w-0">
+              <dl className="space-y-2">
+                <TechRow label="Notification ID"><CopyableId id={data.id} label="notification ID" /></TechRow>
+                <TechRow label="User ID"><CopyableId id={data.userId} label="user ID" /></TechRow>
+                <TechRow label="Template ID"><CopyableId id={data.templateId} label="template ID" /></TechRow>
+                <TechRow label="Created">
+                  <time dateTime={data.createdAt} title={formatDateTime(data.createdAt)} className="text-[13px] text-ink">
+                    {formatRelativeTimePrecise(data.createdAt, now)}
+                  </time>
+                </TechRow>
+                <TechRow label="Updated">
+                  <time dateTime={data.updatedAt} title={formatDateTime(data.updatedAt)} className="text-[13px] text-ink">
+                    {formatRelativeTimePrecise(data.updatedAt, now)}
+                  </time>
+                </TechRow>
+              </dl>
+            </Card>
+          </div>
+
+          {/* Payload */}
+          <div>
+            <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-ink-faint">Payload</p>
+            <JsonViewer data={data.payload} label="Payload JSON" defaultExpanded={Object.keys(data.payload).length > 0} />
+          </div>
+
+          {/* Failure Information (conditional) */}
+          <FailureCard status={data.status} events={timelineEvents} />
+
+          {/* Replay Action + History */}
+          <div className="space-y-4">
+            <ReplaySection notificationId={id} status={data.status} onReplayed={handleReplayed} />
+            <ReplayHistoryCard notificationId={id} now={now} />
           </div>
         </>
       )}

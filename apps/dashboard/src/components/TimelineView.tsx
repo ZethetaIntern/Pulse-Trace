@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTimeline } from '../hooks/useNotifications';
 import { ErrorState } from './ErrorState';
 import { EmptyState } from './EmptyState';
 import { LoadingSkeleton } from './ui';
+import { useNow, formatRelativeTimePrecise, formatDateTime } from '../lib/time';
 import { STATUS_TONE_BADGE, STATUS_TONE_DOT } from './ui/status';
 import type { StatusTone } from './ui/status';
 import type { TimelineEventResponse } from '../types';
@@ -74,31 +75,6 @@ const EVENT_CHIP: Record<string, string> = {
   REPLAY_COMPLETED: 'replay',
 };
 
-function useNow(intervalMs = 5_000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
-
-function formatRelativeTime(time: number | string, now: number): string {
-  const t = typeof time === 'number' ? time : Date.parse(time);
-  if (!Number.isFinite(t)) return '—';
-  const seconds = Math.max(0, Math.round((now - t) / 1000));
-  if (seconds < 45) return seconds <= 10 ? 'just now' : `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
-
 function MetadataSummary({ metadata }: { metadata: Record<string, unknown> }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -168,7 +144,7 @@ function TimelineItem({
         </div>
         <p className="mt-0.5 text-meta text-ink-faint">
           <time dateTime={event.timestamp} title={formatDateTime(event.timestamp)}>
-            {formatRelativeTime(event.timestamp, now)}
+            {formatRelativeTimePrecise(event.timestamp, now)}
           </time>
         </p>
         {event.metadata && Object.keys(event.metadata).length > 0 && (

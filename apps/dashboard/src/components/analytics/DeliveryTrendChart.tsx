@@ -69,10 +69,15 @@ export function DeliveryTrendChart({ buckets, interval }: DeliveryTrendChartProp
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <table className="sr-only"><caption>Delivery trends summary</caption>
-        <thead><tr><th scope="col">Date</th><th scope="col">Created</th><th scope="col">Delivered</th><th scope="col">Failed</th><th scope="col">Retried</th></tr></thead>
-        <tbody>{buckets.map((b) => <tr key={b.date}><td>{formatFullDate(b.date)}</td><td>{b.created}</td><td>{b.delivered}</td><td>{b.failed}</td><td>{b.retried}</td></tr>)}</tbody>
-      </table>
+      {/* Wrapped in a div: sr-only's 1px width doesn't shrink a bare <table>
+          (tables treat width as a minimum), which caused horizontal overflow
+          on narrow viewports. */}
+      <div className="sr-only">
+        <table><caption>Delivery trends summary</caption>
+          <thead><tr><th scope="col">Date</th><th scope="col">Created</th><th scope="col">Delivered</th><th scope="col">Failed</th><th scope="col">Retried</th></tr></thead>
+          <tbody>{buckets.map((b) => <tr key={b.date}><td>{formatFullDate(b.date)}</td><td>{b.created}</td><td>{b.delivered}</td><td>{b.failed}</td><td>{b.retried}</td></tr>)}</tbody>
+        </table>
+      </div>
       {!hasActivity && <p className="mt-2 text-[11px] text-ink-faint">No delivery activity recorded in this period.</p>}
     </figure>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useMonitoringHealth, useQueueMetrics, useWorkerMetrics } from '../hooks/useMonitoring';
 import { EmptyState } from '../components/EmptyState';
@@ -12,6 +12,7 @@ import {
   resolveStatusTone,
 } from '../components/ui/status';
 import type { StatusTone } from '../components/ui/status';
+import { useNow, formatRelativeTime } from '../lib/time';
 import type {
   MonitoringHealthResponse,
   QueueMetricsResponse,
@@ -30,29 +31,6 @@ const TONE_TEXT: Record<StatusTone, string> = {
   info: 'text-info-text',
   neutral: 'text-ink',
 };
-
-function useNow(intervalMs = 5_000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
-
-function formatRelativeTime(time: number | string, now: number): string {
-  const ts = typeof time === 'string' ? new Date(time).getTime() : time;
-  if (!Number.isFinite(ts)) return '—';
-  const diffMs = Math.max(0, now - ts);
-  const s = Math.floor(diffMs / 1000);
-  if (s < 5) return 'just now';
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
-}
 
 function classifyOverallStatus(status: string): 'healthy' | 'degraded' | 'error' {
   if (status === 'healthy') return 'healthy';
@@ -78,80 +56,66 @@ function StatCell({ label, value, valueClass = 'text-ink' }: { label: string; va
 }
 
 // ============================================================
-// Health banner — compact strip
+// System Health — overall status + component dependency grid
 // ============================================================
 
-function HealthBanner({ health }: { health: HealthQuery }) {
-  if (health.isLoading) {
-    return <div className="rounded-card border border-line bg-surface px-4 py-2"><LoadingSkeleton rows={1} /></div>;
-  }
-
-  if (health.isError || !health.data) {
-    return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2">
-        <p className="text-[13px] text-ink-muted">System health is currently unavailable.</p>
-        <Button variant="secondary" size="sm" onClick={() => health.refetch()}>Retry</Button>
-      </div>
-    );
-  }
-
-  const overall = classifyOverallStatus(health.data.status);
-  const tone = resolveStatusTone(overall);
-  const headline = overall === 'healthy' ? 'All systems operational' : overall === 'degraded' ? 'Some systems degraded' : 'System health requires attention';
-
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface px-4 py-2">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <StatusDot status={overall} size="md" />
-        <div className="min-w-0">
-          <p className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{headline}</p>
-          <p className="truncate text-[11px] text-ink-faint">API · PostgreSQL · Redis · Queue · Worker</p>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[10px] font-medium text-neutral-text">{health.data.environment}</span>
-        <span className="text-[11px] text-ink-faint">Uptime {formatUptime(health.data.uptime)}</span>
-      </div>
-    </div>
-  );
-}
-
-// ============================================================
-// System components — 5 compact cells
-// ============================================================
-
-function ComponentCell({ label, check }: { label: string; check: { status: string; latencyMs?: number } }) {
-  const status = classifyCheckStatus(check.status);
-  const tone = resolveStatusTone(status);
-
-  return (
-    <div className="bg-surface px-3.5 py-2.5">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">{label}</p>
-      <div className="mt-0.5 flex items-center gap-1.5">
-        <StatusDot status={status} />
-        <span className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{formatCheckStatus(check.status)}</span>
-      </div>
-      {check.latencyMs !== undefined && <p className="mt-0.5 text-[11px] text-ink-faint">{check.latencyMs}ms</p>}
-    </div>
-  );
-}
-
-function SystemComponents({ health }: { health: HealthQuery }) {
+function SystemHealth({ health }: { health: HealthQuery }) {
   return (
     <div className="rounded-card border border-line bg-surface">
-      <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+      {/* Overall status banner */}
+      <div className="border-b border-line px-4 py-2.5">
+        {health.isLoading && <LoadingSkeleton rows={1} />}
+        {health.isError && (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[13px] text-ink-muted">System health is currently unavailable.</p>
+            <Button variant="secondary" size="sm" onClick={() => health.refetch()}>Retry</Button>
+          </div>
+        )}
+        {!health.isLoading && !health.isError && health.data && (() => {
+          const overall = classifyOverallStatus(health.data.status);
+          const tone = resolveStatusTone(overall);
+          const headline = overall === 'healthy' ? 'All systems operational' : overall === 'degraded' ? 'Some systems degraded' : 'System health requires attention';
+          return (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <StatusDot status={overall} size="md" />
+                <p className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{headline}</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded bg-neutral-soft px-1.5 py-0.5 text-[10px] font-medium text-neutral-text">{health.data.environment}</span>
+                <span className="text-[11px] text-ink-faint">Uptime {formatUptime(health.data.uptime)}</span>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* Component dependency grid */}
+      <div className="flex items-center justify-between border-b border-line px-4 py-2">
         <h2 className="text-section-title text-ink">System Components</h2>
         <span className="text-[11px] text-ink-faint">Dependency health checks</span>
       </div>
+
       {health.isLoading && <div className="px-4 py-3"><LoadingSkeleton rows={3} /></div>}
       {health.isError && <div className="px-4 py-3"><ErrorState title="Unable to load system health" message="Could not load dependency health." onRetry={health.refetch} /></div>}
       {!health.isLoading && !health.isError && health.data && (
         <div className="grid grid-cols-1 gap-px overflow-hidden bg-line sm:grid-cols-2 lg:grid-cols-5">
-          <ComponentCell label="API" check={health.data.checks.api} />
-          <ComponentCell label="PostgreSQL" check={health.data.checks.postgres} />
-          <ComponentCell label="Redis" check={health.data.checks.redis} />
-          <ComponentCell label="Queue" check={health.data.checks.queue} />
-          <ComponentCell label="Worker" check={health.data.checks.worker} />
+          {(['api', 'postgres', 'redis', 'queue', 'worker'] as const).map((key) => {
+            const check = health.data!.checks[key];
+            const status = classifyCheckStatus(check.status);
+            const tone = resolveStatusTone(status);
+            const label = key === 'postgres' ? 'PostgreSQL' : key === 'api' ? 'API' : key.charAt(0).toUpperCase() + key.slice(1);
+            return (
+              <div key={key} className="bg-surface px-3.5 py-2.5">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-ink-faint">{label}</p>
+                <div className="mt-0.5 flex items-center gap-1.5">
+                  <StatusDot status={status} />
+                  <span className={`text-[13px] font-medium ${TONE_TEXT[tone]}`}>{formatCheckStatus(check.status)}</span>
+                </div>
+                {check.latencyMs !== undefined && <p className="mt-0.5 text-[11px] text-ink-faint">{check.latencyMs}ms</p>}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -159,7 +123,7 @@ function SystemComponents({ health }: { health: HealthQuery }) {
 }
 
 // ============================================================
-// Queue operations — dense metrics
+// Queue Operations — current pressure + cumulative activity
 // ============================================================
 
 function QueueOperations({ queue }: { queue: QueueQuery }) {
@@ -195,9 +159,6 @@ function QueueOperations({ queue }: { queue: QueueQuery }) {
               <StatCell label="Failed" value={queue.data.counts.failed} valueClass={queue.data.counts.failed > 0 ? 'text-error-text' : 'text-ink'} />
             </div>
           </div>
-          <div className="px-4 py-2">
-            <p className="text-[11px] text-ink-faint">Waiting, active and delayed reflect the current queue depth. Completed and failed are cumulative totals.</p>
-          </div>
         </div>
       )}
     </div>
@@ -205,7 +166,7 @@ function QueueOperations({ queue }: { queue: QueueQuery }) {
 }
 
 // ============================================================
-// Workers — dense operational rows
+// Workers — worker state and activity
 // ============================================================
 
 function WorkerRow({ worker }: { worker: WorkerMetricsItemResponse }) {
@@ -228,9 +189,6 @@ function WorkerRow({ worker }: { worker: WorkerMetricsItemResponse }) {
         <StatCell label="Completed" value={worker.queueCounts.completed} />
         <StatCell label="Failed" value={worker.queueCounts.failed} valueClass={worker.queueCounts.failed > 0 ? 'text-error-text' : 'text-ink'} />
       </div>
-      <p className="mt-1 text-[11px] text-ink-faint">
-        Waiting, active, completed and failed are queue-level counts reported alongside this worker.
-      </p>
     </li>
   );
 }
@@ -301,8 +259,7 @@ export function MonitoringPage() {
           </div>
         }
       />
-      <HealthBanner health={health} />
-      <SystemComponents health={health} />
+      <SystemHealth health={health} />
       <QueueOperations queue={queue} />
       <WorkersSection workers={workers} />
     </div>

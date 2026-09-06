@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useNotifications } from '../hooks/useNotifications';
 import { StatusBadge, PriorityBadge, ChannelBadge, CategoryBadge } from '../components/StatusBadge';
@@ -6,6 +6,7 @@ import { Pagination } from '../components/Pagination';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { PageHeader, Button } from '../components/ui';
+import { useNow, formatRelativeTimePrecise, formatDateTime } from '../lib/time';
 import type {
   ListNotificationsParams,
   NotificationResponse,
@@ -39,33 +40,6 @@ const STATUS_TABS: Array<{ value: NotificationStatus | 'ALL'; label: string }> =
   { value: 'ALL', label: 'All' },
   ...STATUS_OPTIONS.map((s) => ({ value: s, label: STATUS_TAB_LABELS[s] })),
 ];
-
-// ─── Relative time ───────────────────────────────────────────
-
-function useNow(intervalMs = 5_000): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
-
-function formatRelativeTime(time: number | string, now: number): string {
-  const t = typeof time === 'number' ? time : Date.parse(time);
-  if (!Number.isFinite(t)) return '—';
-  const seconds = Math.max(0, Math.round((now - t) / 1000));
-  if (seconds < 45) return seconds <= 10 ? 'just now' : `${seconds}s ago`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString();
-}
 
 // ─── Filter select ──────────────────────────────────────────
 
@@ -192,9 +166,9 @@ function NotificationsTable({
             </td>
             <td
               className="whitespace-nowrap px-3 py-1.5 text-[11px] text-ink-muted"
-              title={formatDate(n.createdAt)}
+              title={formatDateTime(n.createdAt)}
             >
-              {formatRelativeTime(n.createdAt, now)}
+              {formatRelativeTimePrecise(n.createdAt, now)}
             </td>
             <td className="whitespace-nowrap px-3 py-1.5 text-right">
               <Link
@@ -234,8 +208,8 @@ function NotificationCards({
           >
             <span className="flex items-center justify-between gap-2">
               <StatusBadge status={n.status} withDot size="sm" />
-              <span className="text-[10px] text-ink-faint" title={formatDate(n.createdAt)}>
-                {formatRelativeTime(n.createdAt, now)}
+              <span className="text-[10px] text-ink-faint" title={formatDateTime(n.createdAt)}>
+                {formatRelativeTimePrecise(n.createdAt, now)}
               </span>
             </span>
             <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12px]">
@@ -331,7 +305,7 @@ export function NotificationsPage() {
           <div className="flex items-center gap-2.5">
             {dataUpdatedAt > 0 && (
               <span className="hidden text-[11px] text-ink-faint sm:inline">
-                Updated {formatRelativeTime(dataUpdatedAt, now)}
+                Updated {formatRelativeTimePrecise(dataUpdatedAt, now)}
               </span>
             )}
             <Button variant="secondary" size="sm" onClick={() => refetch()} disabled={isFetching}>
