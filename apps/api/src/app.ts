@@ -14,6 +14,13 @@ import { requestIdMiddleware } from './shared/middleware/request-id';
 
 const app = express();
 
+// Reverse-proxy topology: nginx is the single, trusted proxy in front of the
+// API. `trust proxy 1` tells Express to resolve req.ip from the LAST
+// X-Forwarded-For entry (appended by nginx with the real client IP) instead
+// of the socket address. Client-supplied leftmost X-Forwarded-For entries are
+// never trusted, so the rate limiter cannot be bypassed with spoofed IPs.
+app.set('trust proxy', 1);
+
 // Security headers via Helmet.  Tuned for a JSON API that is consumed by a
 // separate dashboard origin:
 //  - crossOriginEmbedderPolicy disabled (breaks cross-origin fetch from dashboard)

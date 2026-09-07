@@ -1,0 +1,4 @@
+# Shell scripts must always have LF line endings — CRLF (as produced by
+# Windows checkouts with core.autocrlf=true) breaks the shebang when the
+# script is executed inside Linux containers.
+*.sh text eol=lf

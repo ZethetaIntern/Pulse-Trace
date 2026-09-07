@@ -100,6 +100,10 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    # The app's graceful-shutdown handler drains for up to 10s (server.ts).
+    # Docker's default stop timeout is also 10s, which would SIGKILL the
+    # process mid-drain — allow a wider window.
+    stop_grace_period: 30s
     restart: unless-stopped
     # No ports: — internal only, accessed via nginx
 

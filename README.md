@@ -160,6 +160,167 @@ The React dashboard runs at **http://localhost:5173** and proxies API requests t
 
 <!-- Screenshot: Analytics Dashboard -->
 
+## Production Deployment
+
+PulseTrace ships as a self-contained production Docker Compose stack:
+
+```
+nginx (public :80) → api (:4000, internal) → postgres + redis (internal only)
+```
+
+Only nginx is exposed to the host. Postgres, Redis, and the API are reachable
+only on the internal Docker network.
+
+### Prerequisites
+
+- Docker Engine 20.10+ with the Compose v2 plugin (`docker compose version`)
+- 2 GB+ free RAM and disk space for images and volumes
+- A domain (optional) pointing at the host — required if you serve over HTTPS
+
+### 1. Configure production environment variables
+
+Start from the template:
+
+```bash
+cp .env.example.production .env.production
+```
+
+Then edit `.env.production`. Required values:
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `POSTGRES_PASSWORD` | Yes | Strong password for Postgres (see below) |
+| `POSTGRES_USER` / `POSTGRES_DB` | Yes | Defaults to `pulsetrace` |
+| `CORS_ORIGINS` | Yes | Comma-separated public origins, e.g. `https://pulse.example.com` |
+| `NGINX_PORT` | No | Host port for nginx, default `80` |
+| `RATE_LIMIT_WINDOW_MS` / `RATE_LIMIT_MAX` | No | Default 100 POSTs per 60s per client IP |
+| `RUN_MIGRATIONS` | No | The compose default is `true` (see “Migrations” below) |
+
+**Generate strong PostgreSQL credentials** (do not reuse the dev credentials):
+
+```bash
+# OpenSSL
+openssl rand -base64 32
+# or /dev/urandom
+tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32
+```
+
+The compose file builds `DATABASE_URL` from `POSTGRES_USER`, `POSTGRES_PASSWORD`,
+and `POSTGRES_DB`, so the API and the database always share the same
+credentials — keep `.env.production` as the single place where the password is
+set.
+
+**Set `CORS_ORIGINS` to your public dashboard origin** (scheme + host, no
+trailing slash, no path):
+
+```
+CORS_ORIGINS=https://pulse.example.com
+```
+
+This matters even though the dashboard and API share one origin behind nginx:
+browsers attach an `Origin` header to every **POST** request (but not to
+same-origin GETs), and the API rejects production requests whose `Origin` is
+not allow-listed. Without this setting the dashboard renders but every
+creating/replay POST fails. Wildcards are intentionally not supported in
+production — never set `*`.
+
+### 2. Build the production images
+
+```bash
+docker compose -f docker-compose.prod.yml build
+```
+
+### 3. Start the stack
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+### Migrations
+
+By default the API container runs `prisma migrate deploy` before starting the
+server (`RUN_MIGRATIONS=true`). `migrate deploy` only applies *pending*
+migrations and is idempotent, so the same setting is safe on every deploy.
+Migrations must not run concurrently from multiple containers — for a
+single-instance compose deployment the default is correct.
+
+### Health & readiness verification
+
+```bash
+# Through nginx (public entry point)
+curl -f http://localhost/health          # liveness — API process is up
+curl -f http://localhost/health/ready    # readiness — Postgres + Redis reachable
+curl -f http://localhost/api/v1/analytics/dashboard
+
+# Container status (all services should be "healthy")
+docker compose -f docker-compose.prod.yml ps
+```
+
+`/health` verifies the process only; `/health/ready` returns `503` while
+Postgres or Redis are unreachable. The dashboard should load at
+`http://localhost/` (or your configured `NGINX_PORT`).
+
+### Logs
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs -f nginx
+```
+
+### Stopping & restarting
+
+```bash
+docker compose -f docker-compose.prod.yml down          # stop + remove containers, keep volumes
+docker compose -f docker-compose.prod.yml restart       # restart all services
+```
+
+The API drains in-flight requests for up to 10s on shutdown
+(`stop_grace_period: 30s` gives it room).
+
+### Backups
+
+Back up the `postgres_data` volume regularly, e.g. nightly:
+
+```bash
+docker compose -f docker-compose.prod.yml exec postgres \
+  pg_dump -U pulsetrace pulsetrace | gzip > backup-$(date +%F).sql.gz
+```
+
+Store backups off-host. Redis only holds transient queue state — it does not
+need to be backed up.
+
+### Upgrades
+
+```bash
+git pull                                     # or deploy the new image/tag
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+`up -d` recreates only containers whose image/config changed; data lives in
+named volumes and is preserved. Pending migrations apply automatically at API
+startup.
+
+### Rollback
+
+Rollbacks must not roll the schema *backwards* — Prisma `migrate deploy` never
+downgrades. To roll back an API-only change:
+
+```bash
+git checkout <previous-release-tag>
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+```
+
+The previous API version runs against the newer schema (migrations are
+additive, so this is safe). For schema-level rollbacks, restore the database
+from the most recent `pg_dump` backup, then start the older version.
+
+### Do not seed production
+
+`prisma db seed` is a development/demo tool. Production databases should stay
+seedless — data is created through the API.
+
 ## Testing
 
 The test suite covers unit, integration, and end-to-end layers:

@@ -34,11 +34,12 @@ function loadEnvironment(): Environment {
   const queueBackoffMs = parseInt(process.env.QUEUE_BACKOFF_MS || '1000', 10);
 
   // CORS origins: comma-separated list. In development, defaults to '*' if not set.
-  // In production, must be explicitly configured.
+  // In production, must be explicitly configured. Trailing slashes are stripped
+  // so `https://example.com/` matches the browser-sent `https://example.com`.
   const corsOriginsRaw = process.env.CORS_ORIGINS || '';
   const corsOrigins = corsOriginsRaw
     .split(',')
-    .map((s) => s.trim())
+    .map((s) => s.trim().replace(/\/+$/, ''))
     .filter((s) => s.length > 0);
 
   // Rate limiting: configurable per-window request cap.

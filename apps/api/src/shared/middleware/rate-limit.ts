@@ -21,17 +21,20 @@ function rateLimitHandler(_req: Request, res: Response): void {
 }
 
 /**
- * Extracts a rate-limit key from the request.  Prefers the leftmost
- * X-Forwarded-For value (set by nginx / load-balancer), then falls back
- * to req.ip.  When neither is available a static string is used so that
- * all unknown-IP requests share a single bucket (conservative for MVP).
+ * Extracts a rate-limit key from the request.
+ *
+ * The app is configured with `app.set('trust proxy', 1)` (see app.ts), which
+ * matches the nginx → API topology: nginx appends the real client IP as the
+ * LAST X-Forwarded-For entry, and Express resolves `req.ip` from that entry.
+ *
+ * Client-supplied leftmost X-Forwarded-For values are therefore never used
+ * for keying — trusting them would let attackers rotate spoofed IPs to
+ * bypass the limiter.
+ *
+ * When no IP is available a static string is used so that all unknown-IP
+ * requests share a single bucket (conservative for MVP).
  */
 function keyGenerator(req: Request): string {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    const first = forwarded.split(',')[0].trim();
-    if (first) return first;
-  }
   return req.ip || 'unknown';
 }
 

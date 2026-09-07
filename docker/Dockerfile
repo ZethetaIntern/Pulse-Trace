@@ -83,6 +83,12 @@ RUN npm ci --omit=dev
 COPY --from=deps /app/node_modules/prisma ./node_modules/prisma
 COPY --from=deps /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 
+# @prisma/engines is the ONLY runtime dependency of the prisma CLI package
+# and contains the schema engine binary that `prisma migrate deploy` needs.
+# `npm ci --omit=dev` prunes it (prisma itself is a devDependency), so it
+# must be copied explicitly — without it migrations crash at startup.
+COPY --from=deps /app/node_modules/@prisma/engines ./node_modules/@prisma/engines
+
 # Copy generated Prisma Client (created by prisma generate in build stage)
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 
@@ -94,7 +100,10 @@ COPY --from=build /app/apps/api/prisma ./apps/api/prisma
 
 # Copy production entrypoint script
 COPY scripts/start.sh ./scripts/start.sh
-RUN chmod +x ./scripts/start.sh
+# Normalize line endings: on Windows checkouts (core.autocrlf=true) the file
+# has CRLF endings, which break the `#!/bin/sh` shebang in Linux containers
+# (`not found` at exec). Strip CRs before chmod.
+RUN sed -i 's/\r$//' ./scripts/start.sh && chmod +x ./scripts/start.sh
 
 # Set ownership for non-root user
 RUN chown -R pulsetrace:pulsetrace /app

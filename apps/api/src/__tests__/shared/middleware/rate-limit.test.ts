@@ -14,6 +14,10 @@ import { apiRateLimiter } from '../../../shared/middleware/rate-limit';
 function createTestApp() {
   const app = express();
 
+  // Mirror the production configuration (app.ts): nginx is the single trusted
+  // proxy, so req.ip resolves to the LAST X-Forwarded-For entry.
+  app.set('trust proxy', 1);
+
   // Simulate request-id middleware (attaches requestId and sets header).
   app.use((req: Request, res: Response, next) => {
     const incoming = req.headers['x-request-id'];
@@ -136,6 +140,7 @@ describe('Rate Limiter', () => {
     // Create app with GET also going through the rate limiter middleware
     // but only POST is actually rate-limited (simulating app.ts behavior).
     const app = express();
+    app.set('trust proxy', 1);
     app.use((req: Request, res: Response, next) => {
       req.requestId = 'test-id';
       res.setHeader('X-Request-ID', req.requestId);
@@ -158,6 +163,60 @@ describe('Rate Limiter', () => {
         st.default(app).get('/api/v1/notifications'),
       );
       expect(res.status).toBe(200);
+    }
+  });
+
+  it('does not trust spoofed leftmost X-Forwarded-For values when keying', async () => {
+    const app = createTestApp();
+
+    // Client A spoofs a leftmost XFF entry; nginx (trusted, hop 1) appends the
+    // real client IP as the LAST entry. With `trust proxy 1`, Express must
+    // key on 203.0.113.50 — not the attacker-supplied 9.9.9.9.
+    const requests = Array.from({ length: 101 }, () =>
+      import('supertest').then((st) =>
+        st.default(app)
+          .post('/api/v1/notifications')
+          .set('X-Forwarded-For', '9.9.9.9, 203.0.113.50')
+          .send({}),
+      ),
+    );
+    const responses = await Promise.all(requests);
+    expect(responses.some((r) => r.status === 429)).toBe(true);
+
+    // A later request from the same real client (nginx appends the same IP)
+    // shares the bucket with the earlier requests — the spoofed leftmost
+    // value did not create a separate bucket.
+    const sameRealClient = await import('supertest').then((st) =>
+      st.default(app)
+        .post('/api/v1/notifications')
+        .set('X-Forwarded-For', '203.0.113.50')
+        .send({}),
+    );
+    expect(sameRealClient.status).toBe(429);
+
+    // A genuinely different client keeps its own fresh bucket.
+    const otherClient = await import('supertest').then((st) =>
+      st.default(app)
+        .post('/api/v1/notifications')
+        .set('X-Forwarded-For', '203.0.113.51')
+        .send({}),
+    );
+    expect(otherClient.status).toBe(202);
+  });
+
+  it('keys separate clients behind the proxy into independent buckets', async () => {
+    const app = createTestApp();
+
+    for (const ip of ['203.0.113.60', '203.0.113.61']) {
+      for (let i = 0; i < 10; i++) {
+        const res = await import('supertest').then((st) =>
+          st.default(app)
+            .post('/api/v1/notifications')
+            .set('X-Forwarded-For', ip)
+            .send({}),
+        );
+        expect(res.status).toBe(202);
+      }
     }
   });
 });
