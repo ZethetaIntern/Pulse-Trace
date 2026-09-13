@@ -20,6 +20,8 @@ interface Environment {
   rateLimitWindowMs: number;
   rateLimitMax: number;
   analyticsMaxRangeDays: number;
+  kafkaBrokers: string[];
+  kafkaClientId: string;
 }
 
 function loadEnvironment(): Environment {
@@ -50,6 +52,14 @@ function loadEnvironment(): Environment {
   // Analytics: maximum allowed date range in days to prevent expensive queries.
   const analyticsMaxRangeDays = parseInt(process.env.ANALYTICS_MAX_RANGE_DAYS || '365', 10);
 
+  // Kafka configuration
+  const kafkaBrokersRaw = process.env.KAFKA_BROKERS || 'localhost:9092';
+  const kafkaBrokers = kafkaBrokersRaw
+    .split(',')
+    .map((b) => b.trim())
+    .filter((b) => b.length > 0);
+  const kafkaClientId = process.env.KAFKA_CLIENT_ID || 'pulsetrace-api';
+
   return {
     port,
     nodeEnv,
@@ -62,7 +72,10 @@ function loadEnvironment(): Environment {
     rateLimitWindowMs,
     rateLimitMax,
     analyticsMaxRangeDays,
+    kafkaBrokers,
+    kafkaClientId,
   };
 }
 
 export const env = loadEnvironment();
+

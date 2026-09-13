@@ -12,7 +12,8 @@
     "db:seed": "prisma db seed",
     "test": "jest",
     "test:watch": "jest --watch",
-    "test:integration": "jest --config jest.integration.config.js --forceExit --detectOpenHandles"
+    "test:integration": "jest --config jest.integration.config.js --forceExit --detectOpenHandles",
+    "kafka:init-topics": "tsx src/infrastructure/kafka/scripts/init-topics.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -25,6 +26,7 @@
     "express-rate-limit": "^8.6.2",
     "helmet": "^8.3.0",
     "ioredis": "^5.4.0",
+    "kafkajs": "^2.2.4",
     "pino": "^9.1.0",
     "pino-pretty": "^11.2.0"
   },
