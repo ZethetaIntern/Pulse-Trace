@@ -227,9 +227,12 @@ describe('Kafka Infrastructure Integration Tests', () => {
       // Publish the event to Kafka via OutboxPublisher
       await publisher.pollAndPublishOnce();
 
-      // Wait for consumer to receive message (up to 10s)
+      // Wait for consumer to receive the matching message (up to 10s)
       const startTime = Date.now();
-      while (receivedMessages.length === 0 && Date.now() - startTime < 10000) {
+      while (
+        !receivedMessages.some((m) => m.headers['x-event-id'] === outboxRecord.id) &&
+        Date.now() - startTime < 10000
+      ) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
 

@@ -12,6 +12,7 @@ import {
 import { NotificationRepository, PaginatedNotifications } from '../interfaces/notification-repository';
 import { QueueService } from '../interfaces/queue-service';
 import { sanitizeErrorMessage } from '../../../shared/utils/sanitize-error';
+import { env } from '../../../config/env';
 import { PulseTraceOutboxPayload, resolveTopicForPriority } from '../../outbox';
 
 /**
@@ -312,6 +313,12 @@ export class NotificationService implements NotificationProcessingService {
       { notificationId: notification.id, channel: notification.channel, category: notification.category, requestId },
       'Notification created',
     );
+
+    // In Kafka processing mode, notification delivery is driven via Outbox -> Kafka -> Consumer.
+    // BullMQ enqueue is bypassed and JOB_QUEUED is omitted to preserve truthful semantics.
+    if (env.notificationProcessingMode === 'kafka') {
+      return notification;
+    }
 
     let jobId: string | undefined;
     try {

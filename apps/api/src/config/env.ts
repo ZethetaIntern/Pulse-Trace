@@ -22,6 +22,9 @@ interface Environment {
   analyticsMaxRangeDays: number;
   kafkaBrokers: string[];
   kafkaClientId: string;
+  kafkaConsumerGroupId: string;
+  kafkaConsumerConcurrency: number;
+  notificationProcessingMode: 'bullmq' | 'kafka';
 }
 
 function loadEnvironment(): Environment {
@@ -59,6 +62,12 @@ function loadEnvironment(): Environment {
     .map((b) => b.trim())
     .filter((b) => b.length > 0);
   const kafkaClientId = process.env.KAFKA_CLIENT_ID || 'pulsetrace-api';
+  const kafkaConsumerGroupId = process.env.KAFKA_CONSUMER_GROUP_ID || 'pulsetrace-notification-consumers';
+  const kafkaConsumerConcurrency = parseInt(process.env.KAFKA_CONSUMER_CONCURRENCY || '1', 10);
+
+  // Processing mode: 'bullmq' (default) or 'kafka'
+  const modeRaw = (process.env.NOTIFICATION_PROCESSING_MODE || 'bullmq').toLowerCase();
+  const notificationProcessingMode: 'bullmq' | 'kafka' = modeRaw === 'kafka' ? 'kafka' : 'bullmq';
 
   return {
     port,
@@ -74,8 +83,12 @@ function loadEnvironment(): Environment {
     analyticsMaxRangeDays,
     kafkaBrokers,
     kafkaClientId,
+    kafkaConsumerGroupId,
+    kafkaConsumerConcurrency,
+    notificationProcessingMode,
   };
 }
 
 export const env = loadEnvironment();
+
 
