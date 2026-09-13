@@ -141,11 +141,44 @@ model Notification {
   events              NotificationEvent[]
   originalOfReplays   ReplayExecution[]    @relation("OriginalNotificationReplays")
   replayedAsNew       ReplayExecution[]    @relation("NewNotificationReplays")
+  outboxEvents        OutboxEvent[]
 
   @@index([status])
   @@index([createdAt])
   @@index([userId])
   @@map("Notifications")
+}
+
+/// Transactional outbox publication state.
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+}
+
+/// Transactional Outbox for atomic event publishing.
+model OutboxEvent {
+  id            String       @id @default(uuid())
+  aggregateType String       @default("Notification")
+  aggregateId   String
+  eventType     EventType
+  topic         String
+  partitionKey  String
+  payload       Json         @db.JsonB
+  status        OutboxStatus @default(PENDING)
+  retryCount    Int          @default(0)
+  lastError     String?
+  lockedAt      DateTime?
+  lockedBy      String?
+  createdAt     DateTime     @default(now())
+  publishedAt   DateTime?
+
+  notification Notification @relation(fields: [aggregateId], references: [id], onDelete: Restrict)
+
+  @@index([status, createdAt])
+  @@index([aggregateId])
+  @@map("OutboxEvents")
 }
 
 /// Immutable, append-only state transitions.

@@ -1,4 +1,5 @@
-import { EventType, Notification, NotificationEvent, NotificationStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { EventType, Notification, NotificationEvent, NotificationStatus, Priority } from '@prisma/client';
 import { logger } from '../../../infrastructure/logger';
 import { HttpError } from '../../../shared/errors/http-error';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
@@ -11,6 +12,7 @@ import {
 import { NotificationRepository, PaginatedNotifications } from '../interfaces/notification-repository';
 import { QueueService } from '../interfaces/queue-service';
 import { sanitizeErrorMessage } from '../../../shared/utils/sanitize-error';
+import { PulseTraceOutboxPayload, resolveTopicForPriority } from '../../outbox';
 
 /**
  * Application/business logic for notifications.
@@ -224,40 +226,91 @@ export class NotificationService implements NotificationProcessingService {
       ]);
     }
 
-    const notification = await this.repository.createNotification(dto);
+    const topic = resolveTopicForPriority(dto.priority ?? Priority.NORMAL);
+    const eventId = randomUUID();
+    const correlationId = requestId ?? (dto.metadata?.correlationId as string) ?? eventId;
+    const idempotencyKey = (dto.metadata?.idempotencyKey as string) ?? eventId;
+
+    const outboxPayload: PulseTraceOutboxPayload = {
+      eventId,
+      eventType: EventType.NOTIFICATION_CREATED,
+      notificationId: '', // Populated with persisted notificationId
+      userId: dto.userId,
+      templateId: dto.templateId,
+      channel: dto.channel,
+      category: dto.category,
+      priority: dto.priority ?? Priority.NORMAL,
+      payload: (dto.variables ?? {}) as Record<string, unknown>,
+      idempotencyKey,
+      correlationId,
+      timestamp: new Date().toISOString(),
+      retryCount: 0,
+      metadata: {
+        ...(dto.metadata ?? {}),
+        ...(requestId ? { requestId } : {}),
+      },
+    };
+
+    let notification: Notification;
+
+    if (this.repository.createNotificationTransactional) {
+      notification = await this.repository.createNotificationTransactional({
+        dto,
+        initialStatus: NotificationStatus.QUEUED,
+        events: [
+          {
+            eventType: EventType.NOTIFICATION_CREATED,
+            statusAfter: NotificationStatus.CREATED,
+            ...(requestId ? { metadata: { requestId } } : {}),
+          },
+          {
+            eventType: EventType.REQUEST_VALIDATED,
+            statusBefore: NotificationStatus.CREATED,
+            statusAfter: NotificationStatus.CREATED,
+            ...(requestId ? { metadata: { requestId } } : {}),
+          },
+          {
+            eventType: EventType.NOTIFICATION_STORED,
+            statusBefore: NotificationStatus.CREATED,
+            statusAfter: NotificationStatus.CREATED,
+            ...(requestId ? { metadata: { requestId } } : {}),
+          },
+        ],
+        outbox: {
+          topic,
+          partitionKey: dto.userId,
+          payload: outboxPayload as unknown as Record<string, unknown>,
+        },
+      });
+    } else {
+      // Fallback for simple unit test mocks
+      notification = await this.repository.createNotification(dto);
+      await this.eventRepository.recordEvent({
+        notificationId: notification.id,
+        eventType: EventType.NOTIFICATION_CREATED,
+        statusAfter: NotificationStatus.CREATED,
+        ...(requestId ? { metadata: { requestId } } : {}),
+      });
+      await this.eventRepository.recordEvent({
+        notificationId: notification.id,
+        eventType: EventType.REQUEST_VALIDATED,
+        statusBefore: NotificationStatus.CREATED,
+        statusAfter: NotificationStatus.CREATED,
+        ...(requestId ? { metadata: { requestId } } : {}),
+      });
+      await this.eventRepository.recordEvent({
+        notificationId: notification.id,
+        eventType: EventType.NOTIFICATION_STORED,
+        statusBefore: NotificationStatus.CREATED,
+        statusAfter: NotificationStatus.CREATED,
+        ...(requestId ? { metadata: { requestId } } : {}),
+      });
+      await this.repository.updateNotificationStatus(notification.id, NotificationStatus.QUEUED);
+    }
 
     logger.info(
       { notificationId: notification.id, channel: notification.channel, category: notification.category, requestId },
       'Notification created',
-    );
-
-    await this.eventRepository.recordEvent({
-      notificationId: notification.id,
-      eventType: EventType.NOTIFICATION_CREATED,
-      statusAfter: NotificationStatus.CREATED,
-      ...(requestId ? { metadata: { requestId } } : {}),
-    });
-    await this.eventRepository.recordEvent({
-      notificationId: notification.id,
-      eventType: EventType.REQUEST_VALIDATED,
-      statusBefore: NotificationStatus.CREATED,
-      statusAfter: NotificationStatus.CREATED,
-      ...(requestId ? { metadata: { requestId } } : {}),
-    });
-    await this.eventRepository.recordEvent({
-      notificationId: notification.id,
-      eventType: EventType.NOTIFICATION_STORED,
-      statusBefore: NotificationStatus.CREATED,
-      statusAfter: NotificationStatus.CREATED,
-      ...(requestId ? { metadata: { requestId } } : {}),
-    });
-
-    // Persist QUEUED before the job is enqueued. This guarantees a fast worker
-    // can never observe a pre-queue state, and that the QUEUED write can never
-    // overwrite a later PROCESSING/DELIVERED write made by the worker.
-    const queuedNotification = await this.repository.updateNotificationStatus(
-      notification.id,
-      NotificationStatus.QUEUED,
     );
 
     let jobId: string | undefined;
@@ -272,6 +325,7 @@ export class NotificationService implements NotificationProcessingService {
       await this.markEnqueueFailed(notification.id, error);
       throw new HttpError('Queue unavailable', 503, 'QUEUE_UNAVAILABLE');
     }
+
     await this.eventRepository.recordEvent({
       notificationId: notification.id,
       eventType: EventType.JOB_QUEUED,
@@ -282,7 +336,7 @@ export class NotificationService implements NotificationProcessingService {
     });
 
     // Return the accepted (QUEUED) state so the API response is never stale.
-    return queuedNotification ?? notification;
+    return notification;
   }
 
   async getNotificationById(notificationId: string): Promise<Notification> {

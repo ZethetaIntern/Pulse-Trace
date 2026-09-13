@@ -1,6 +1,8 @@
 import {
+  EventType,
   Notification,
   NotificationStatus,
+  OutboxStatus,
   Prisma,
   PrismaClient,
   Template,
@@ -10,6 +12,7 @@ import { prisma } from '../../../infrastructure/database/prisma';
 import { CreateNotificationDto } from '../dto/create-notification.dto';
 import { ListNotificationsQuery } from '../dto/list-notifications-query';
 import {
+  CreateNotificationTransactionalInput,
   NotificationRepository,
   PaginatedNotifications,
 } from '../interfaces/notification-repository';
@@ -41,6 +44,63 @@ export class PrismaNotificationRepository implements NotificationRepository {
         payload: (dto.variables ?? {}) as Prisma.InputJsonValue,
         metadata: (dto.metadata ?? {}) as Prisma.InputJsonValue,
       },
+    });
+  }
+
+  /**
+   * Atomically creates a Notification, its initial NotificationEvents, and
+   * its corresponding OutboxEvent in a single PostgreSQL ACID transaction.
+   */
+  async createNotificationTransactional(input: CreateNotificationTransactionalInput): Promise<Notification> {
+    return this.db.$transaction(async (tx) => {
+      const notification = await tx.notification.create({
+        data: {
+          userId: input.dto.userId,
+          templateId: input.dto.templateId,
+          channel: input.dto.channel,
+          category: input.dto.category,
+          priority: input.dto.priority,
+          status: input.initialStatus ?? NotificationStatus.QUEUED,
+          payload: (input.dto.variables ?? {}) as Prisma.InputJsonValue,
+          metadata: (input.dto.metadata ?? {}) as Prisma.InputJsonValue,
+        },
+      });
+
+      if (input.events && input.events.length > 0) {
+        for (const evt of input.events) {
+          await tx.notificationEvent.create({
+            data: {
+              notificationId: notification.id,
+              eventType: evt.eventType,
+              statusBefore: evt.statusBefore,
+              statusAfter: evt.statusAfter,
+              metadata: evt.metadata ?? {},
+            },
+          });
+        }
+      }
+
+      if (input.outbox) {
+        // Ensure the payload references the actual persisted notificationId
+        const payloadWithId = {
+          ...input.outbox.payload,
+          notificationId: notification.id,
+        };
+
+        await tx.outboxEvent.create({
+          data: {
+            aggregateType: 'Notification',
+            aggregateId: notification.id,
+            eventType: EventType.NOTIFICATION_CREATED,
+            topic: input.outbox.topic,
+            partitionKey: input.outbox.partitionKey,
+            payload: payloadWithId as Prisma.InputJsonValue,
+            status: OutboxStatus.PENDING,
+          },
+        });
+      }
+
+      return notification;
     });
   }
 
