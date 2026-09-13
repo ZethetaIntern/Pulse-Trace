@@ -145,6 +145,7 @@ export async function cleanTestDatabase(prisma: PrismaClient): Promise<void> {
   assertTestDatabase(prisma);
 
   // Delete in dependency order (foreign key constraints)
+  await prisma.notificationDeadLetter.deleteMany();
   await prisma.outboxEvent.deleteMany();
   await prisma.notificationEvent.deleteMany();
   await prisma.replayExecution.deleteMany();

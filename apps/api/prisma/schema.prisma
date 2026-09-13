@@ -142,6 +142,7 @@ model Notification {
   originalOfReplays   ReplayExecution[]    @relation("OriginalNotificationReplays")
   replayedAsNew       ReplayExecution[]    @relation("NewNotificationReplays")
   outboxEvents        OutboxEvent[]
+  deadLetter          NotificationDeadLetter?
 
   @@index([status])
   @@index([createdAt])
@@ -234,4 +235,23 @@ model UserPreference {
   @@index([channel])
   @@index([category])
   @@map("UserPreferences")
+}
+
+/// Durable Dead-Letter Queue records for exhausted or permanently failed notifications.
+model NotificationDeadLetter {
+  id                 String       @id @default(uuid())
+  notificationId     String       @unique
+  originalPayload    Json         @db.JsonB
+  failedAttempts     Int
+  lastErrorCode      String?
+  lastErrorMessage   String?
+  errorDetails       Json         @default("[]") @db.JsonB
+  createdAt          DateTime     @default(now())
+  resolvedAt         DateTime?
+  resolvedBy         String?
+
+  notification       Notification @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@map("NotificationDeadLetters")
 }

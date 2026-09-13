@@ -7,24 +7,15 @@ import { MessageValidator } from './message-validator';
 import { NotificationProcessingService } from '../../modules/notifications/interfaces/notification-processing-service';
 import { NotificationEventRepository } from '../../modules/notifications/interfaces/notification-event-repository';
 import { NotificationRepository } from '../../modules/notifications/interfaces/notification-repository';
-import { ReplayExecutionRepository } from '../../modules/replay/interfaces/replay-execution-repository';
 import { FailureClassifier } from '../../modules/retry/services/failure-classifier';
 import { BackoffCalculator } from '../../modules/retry/services/backoff-calculator';
-import { RetryScheduler } from '../../modules/retry/services/retry-scheduler';
+import { RetryScheduler, RETRY_TOPIC } from '../../modules/retry/services/retry-scheduler';
 import { DlqService } from '../../modules/dlq/services/dlq-service';
 
-export const CONSUMABLE_NOTIFICATION_TOPICS = [
-  'notifications.high',
-  'notifications.normal',
-  'notifications.low',
-] as const;
-
-export type ConsumableTopic = (typeof CONSUMABLE_NOTIFICATION_TOPICS)[number];
-
-export interface NotificationConsumerOptions {
+export interface RetryConsumerOptions {
   groupId?: string;
   concurrency?: number;
-  topics?: string[];
+  topic?: string;
   kafka?: Kafka;
   workerId?: string;
   retryScheduler?: RetryScheduler;
@@ -32,21 +23,21 @@ export interface NotificationConsumerOptions {
   notificationRepository?: NotificationRepository;
 }
 
-export interface ConsumerStatus {
+export interface RetryConsumerStatus {
   isRunning: boolean;
   isConnected: boolean;
   groupId: string;
-  subscribedTopics: string[];
+  subscribedTopic: string;
   assignedPartitions: Array<{ topic: string; partition: number }>;
   totalProcessed: number;
   lastProcessedAt: Date | null;
   lastError: string | null;
 }
 
-export class NotificationConsumer {
+export class RetryConsumer {
   private readonly consumer: Consumer;
   private readonly groupId: string;
-  private readonly topics: string[];
+  private readonly topic: string;
   private readonly concurrency: number;
   private readonly workerId: string;
   private readonly retryScheduler?: RetryScheduler;
@@ -63,13 +54,12 @@ export class NotificationConsumer {
   constructor(
     private readonly processingService: NotificationProcessingService,
     private readonly eventRepository: NotificationEventRepository,
-    private readonly replayExecutionRepository: ReplayExecutionRepository,
-    options: NotificationConsumerOptions = {},
+    options: RetryConsumerOptions = {},
   ) {
-    this.groupId = options.groupId || env.kafkaConsumerGroupId;
-    this.topics = options.topics || [...CONSUMABLE_NOTIFICATION_TOPICS];
-    this.concurrency = options.concurrency ?? env.kafkaConsumerConcurrency;
-    this.workerId = options.workerId || `kafka-consumer-${process.pid}`;
+    this.groupId = options.groupId || env.kafkaRetryConsumerGroupId;
+    this.topic = options.topic || RETRY_TOPIC;
+    this.concurrency = options.concurrency ?? env.kafkaRetryConsumerConcurrency;
+    this.workerId = options.workerId || `kafka-retry-consumer-${process.pid}`;
     this.retryScheduler = options.retryScheduler;
     this.dlqService = options.dlqService;
     this.notificationRepository = options.notificationRepository;
@@ -92,12 +82,12 @@ export class NotificationConsumer {
 
     this.consumer.on(CONNECT, () => {
       this.isConnected = true;
-      logger.info({ groupId: this.groupId }, 'Kafka consumer connected to cluster');
+      logger.info({ groupId: this.groupId }, 'Kafka retry consumer connected to cluster');
     });
 
     this.consumer.on(DISCONNECT, () => {
       this.isConnected = false;
-      logger.info({ groupId: this.groupId }, 'Kafka consumer disconnected from cluster');
+      logger.info({ groupId: this.groupId }, 'Kafka retry consumer disconnected from cluster');
     });
 
     this.consumer.on(GROUP_JOIN, (e) => {
@@ -118,19 +108,19 @@ export class NotificationConsumer {
           duration: e.payload.duration,
           assignedPartitions: assigned,
         },
-        'Kafka consumer joined group and received partition assignment',
+        'Kafka retry consumer joined group and received partition assignment',
       );
     });
 
     this.consumer.on(REBALANCING, () => {
-      logger.info({ groupId: this.groupId }, 'Kafka consumer group rebalancing initiated');
+      logger.info({ groupId: this.groupId }, 'Kafka retry consumer group rebalancing initiated');
     });
 
     this.consumer.on(CRASH, (e) => {
       this.lastError = e.payload.error.message;
       logger.error(
         { groupId: this.groupId, error: e.payload.error.message },
-        'Kafka consumer crashed unexpectedly',
+        'Kafka retry consumer crashed unexpectedly',
       );
     });
   }
@@ -142,14 +132,12 @@ export class NotificationConsumer {
 
     try {
       await this.consumer.connect();
-      for (const topic of this.topics) {
-        await this.consumer.subscribe({ topic, fromBeginning: false });
-      }
+      await this.consumer.subscribe({ topic: this.topic, fromBeginning: false });
 
       this.isRunning = true;
       logger.info(
-        { groupId: this.groupId, topics: this.topics, concurrency: this.concurrency },
-        'Starting Kafka notification consumer...',
+        { groupId: this.groupId, topic: this.topic, concurrency: this.concurrency },
+        'Starting Kafka retry notification consumer...',
       );
 
       await this.consumer.run({
@@ -162,7 +150,7 @@ export class NotificationConsumer {
     } catch (error) {
       this.isRunning = false;
       this.lastError = (error as Error).message;
-      logger.error({ error, groupId: this.groupId }, 'Failed to start Kafka notification consumer');
+      logger.error({ error, groupId: this.groupId }, 'Failed to start Kafka retry consumer');
       throw error;
     }
   }
@@ -181,15 +169,15 @@ export class NotificationConsumer {
           offset: rawOffset,
           error: validationResult.error,
         },
-        'Received malformed Kafka message; committing offset to avoid partition stall',
+        'Received malformed retry message; committing offset to avoid partition stall',
       );
-      // Malformed messages cannot be processed; commit offset to prevent poison-pill partition block
       await this.commitOffsetSafe(topic, partition, nextOffset);
       return;
     }
 
     const { payload, headers } = validationResult;
     const notificationId = payload.notificationId;
+    const currentAttempt = (payload.retryCount || 0) + 1;
 
     logger.debug(
       {
@@ -198,62 +186,39 @@ export class NotificationConsumer {
         offset: rawOffset,
         eventId: payload.eventId,
         notificationId,
+        attempt: currentAttempt,
       },
-      'Processing notification message from Kafka',
-    );
-
-    // 2. Check Replay Execution association (strictly for replayed notifications)
-    const replayExecution = await this.replayExecutionRepository.findReplayExecutionByNewNotificationId(
-      notificationId,
+      'Processing retry notification from Kafka',
     );
 
     try {
-      if (replayExecution) {
-        await this.eventRepository.recordEvent({
-          notificationId,
-          eventType: EventType.REPLAY_STARTED,
-          statusBefore: NotificationStatus.QUEUED,
-          statusAfter: NotificationStatus.PROCESSING,
-          executionId: payload.eventId,
-          metadata: {
-            originalNotificationId: replayExecution.originalNotificationId,
-            replayId: replayExecution.id,
-            workerId: this.workerId,
-            topic,
-            partition,
-            offset: rawOffset,
-          },
-        });
-      }
+      // 2. Emit RETRY_STARTED event
+      await this.eventRepository.recordEvent({
+        notificationId,
+        eventType: EventType.RETRY_STARTED,
+        statusBefore: NotificationStatus.RETRY_PENDING,
+        statusAfter: NotificationStatus.PROCESSING,
+        executionId: payload.eventId,
+        metadata: {
+          attempt: currentAttempt,
+          maxAttempts: env.retryMaxAttempts,
+          workerId: this.workerId,
+          topic,
+          partition,
+          offset: rawOffset,
+          correlationId: headers['x-correlation-id'],
+        },
+      });
 
-      // 3. Delegate to existing application notification processing service
+      // 3. Delegate to application notification processing service
       await this.processingService.processNotification(notificationId, {
         jobId: payload.eventId || `${topic}-${partition}-${rawOffset}`,
         workerId: this.workerId,
-        attemptNumber: (payload.retryCount || 0) + 1,
-        maxAttempts: 1,
+        attemptNumber: currentAttempt,
+        maxAttempts: env.retryMaxAttempts,
       });
 
-      // 4. Emit REPLAY_COMPLETED only upon successful delivery for replay executions
-      if (replayExecution) {
-        await this.eventRepository.recordEvent({
-          notificationId,
-          eventType: EventType.REPLAY_COMPLETED,
-          statusBefore: NotificationStatus.DELIVERED,
-          statusAfter: NotificationStatus.DELIVERED,
-          executionId: payload.eventId,
-          metadata: {
-            originalNotificationId: replayExecution.originalNotificationId,
-            replayId: replayExecution.id,
-            workerId: this.workerId,
-            topic,
-            partition,
-            offset: rawOffset,
-          },
-        });
-      }
-
-      // 5. Commit offset ONLY upon successful notification processing
+      // 4. Commit offset upon successful processing
       await this.commitOffsetSafe(topic, partition, nextOffset);
 
       this.totalProcessed += 1;
@@ -266,19 +231,18 @@ export class NotificationConsumer {
           topic,
           partition,
           offset: rawOffset,
-          correlationId: headers['x-correlation-id'],
+          attempt: currentAttempt,
         },
-        'Successfully processed Kafka notification and committed offset',
+        'Successfully processed retried notification and committed offset',
       );
     } catch (processingError) {
       this.lastError = (processingError as Error).message;
 
       // Classify the failure
       const classification = FailureClassifier.classify(processingError);
-      const currentAttempt = (payload.retryCount || 0) + 1;
       const nextAttempt = currentAttempt + 1;
 
-      // 1. Retryable failure -> Schedule delayed retry in Redis & commit Kafka offset
+      // 1. Retryable failure & attempts remain -> Schedule next retry in Redis
       if (classification.isRetryable && nextAttempt <= env.retryMaxAttempts && this.retryScheduler) {
         try {
           const delayMs = BackoffCalculator.calculateDelay(nextAttempt);
@@ -319,7 +283,7 @@ export class NotificationConsumer {
             );
           }
 
-          // Schedule in Redis ZSET
+          // Schedule next attempt in Redis ZSET
           await this.retryScheduler.scheduleRetry(
             {
               eventId: payload.eventId,
@@ -349,19 +313,19 @@ export class NotificationConsumer {
             delayMs,
           );
 
-          // Commit primary topic offset (partition unblocked)
+          // Commit current retry message offset
           await this.commitOffsetSafe(topic, partition, nextOffset);
           return;
         } catch (scheduleError) {
           logger.error(
             { error: (scheduleError as Error).message, notificationId },
-            'Failed to schedule retry in Redis; offset left uncommitted for redelivery',
+            'Failed to schedule next retry in Redis; offset left uncommitted for redelivery',
           );
           throw scheduleError;
         }
       }
 
-      // 2. Permanent failure -> Move directly to DLQ & commit Kafka offset
+      // 2. Permanent failure -> Move directly to DLQ
       if (!classification.isRetryable && this.dlqService) {
         try {
           await this.dlqService.moveToDlq({
@@ -387,13 +351,13 @@ export class NotificationConsumer {
         } catch (dlqError) {
           logger.error(
             { error: (dlqError as Error).message, notificationId },
-            'Failed to transition permanent failure to DLQ; offset left uncommitted',
+            'Failed to transition permanent retry failure to DLQ; offset left uncommitted',
           );
           throw dlqError;
         }
       }
 
-      // 3. Max attempts exhausted -> Move directly to DLQ & commit Kafka offset
+      // 3. Max attempts exhausted (currentAttempt >= maxAttempts) -> Move to DLQ
       if (currentAttempt >= env.retryMaxAttempts && this.dlqService) {
         try {
           await this.dlqService.moveToDlq({
@@ -434,9 +398,9 @@ export class NotificationConsumer {
           offset: rawOffset,
           error: (processingError as Error).message,
         },
-        'Notification processing failed; offset left uncommitted for Kafka redelivery',
+        'Retry notification processing failed; offset left uncommitted for Kafka redelivery',
       );
-      // Rethrow to keep offset uncommitted in KafkaJS for infrastructure crashes / tests
+      // Rethrow for infrastructure errors so offset remains uncommitted
       throw processingError;
     }
   }
@@ -445,24 +409,24 @@ export class NotificationConsumer {
     if (!this.isRunning) {
       return;
     }
-    logger.info({ groupId: this.groupId }, 'Stopping Kafka notification consumer...');
+    logger.info({ groupId: this.groupId }, 'Stopping Kafka retry consumer...');
     try {
       await this.consumer.stop();
       await this.consumer.disconnect();
       this.isRunning = false;
       this.isConnected = false;
-      logger.info({ groupId: this.groupId }, 'Kafka notification consumer stopped and disconnected');
+      logger.info({ groupId: this.groupId }, 'Kafka retry consumer stopped and disconnected');
     } catch (error) {
-      logger.warn({ error, groupId: this.groupId }, 'Error while stopping Kafka consumer');
+      logger.warn({ error, groupId: this.groupId }, 'Error while stopping Kafka retry consumer');
     }
   }
 
-  getStatus(): ConsumerStatus {
+  getStatus(): RetryConsumerStatus {
     return {
       isRunning: this.isRunning,
       isConnected: this.isConnected,
       groupId: this.groupId,
-      subscribedTopics: [...this.topics],
+      subscribedTopic: this.topic,
       assignedPartitions: [...this.assignedPartitions],
       totalProcessed: this.totalProcessed,
       lastProcessedAt: this.lastProcessedAt,

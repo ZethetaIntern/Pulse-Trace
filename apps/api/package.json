@@ -14,7 +14,9 @@
     "test:watch": "jest --watch",
     "test:integration": "jest --config jest.integration.config.js --forceExit --detectOpenHandles",
     "kafka:init-topics": "tsx src/infrastructure/kafka/scripts/init-topics.ts",
-    "worker:kafka": "tsx src/infrastructure/kafka/scripts/start-consumer.ts"
+    "worker:kafka": "tsx src/infrastructure/kafka/scripts/start-consumer.ts",
+    "worker:kafka:retry": "tsx src/infrastructure/kafka/scripts/start-retry-consumer.ts",
+    "worker:retry-scheduler": "tsx src/infrastructure/kafka/scripts/start-retry-scheduler.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

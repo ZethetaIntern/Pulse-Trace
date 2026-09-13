@@ -25,6 +25,15 @@ interface Environment {
   kafkaConsumerGroupId: string;
   kafkaConsumerConcurrency: number;
   notificationProcessingMode: 'bullmq' | 'kafka';
+  retryBaseDelayMs: number;
+  retryMaxDelayMs: number;
+  retryMaxAttempts: number;
+  retryJitterFactor: number;
+  kafkaRetryConsumerGroupId: string;
+  kafkaRetryConsumerConcurrency: number;
+  retrySchedulerPollIntervalMs: number;
+  retrySchedulerBatchSize: number;
+  retrySchedulerLeaseTtlMs: number;
 }
 
 function loadEnvironment(): Environment {
@@ -69,6 +78,18 @@ function loadEnvironment(): Environment {
   const modeRaw = (process.env.NOTIFICATION_PROCESSING_MODE || 'bullmq').toLowerCase();
   const notificationProcessingMode: 'bullmq' | 'kafka' = modeRaw === 'kafka' ? 'kafka' : 'bullmq';
 
+  // Retry Engine & DLQ Configuration
+  const retryBaseDelayMs = parseInt(process.env.RETRY_BASE_DELAY_MS || '1000', 10);
+  const retryMaxDelayMs = parseInt(process.env.RETRY_MAX_DELAY_MS || '300000', 10);
+  const retryMaxAttempts = parseInt(process.env.RETRY_MAX_ATTEMPTS || '5', 10);
+  const retryJitterFactor = parseFloat(process.env.RETRY_JITTER_FACTOR || '1.0');
+  const kafkaRetryConsumerGroupId =
+    process.env.KAFKA_RETRY_CONSUMER_GROUP_ID || 'pulsetrace-notification-retry-consumers';
+  const kafkaRetryConsumerConcurrency = parseInt(process.env.KAFKA_RETRY_CONSUMER_CONCURRENCY || '1', 10);
+  const retrySchedulerPollIntervalMs = parseInt(process.env.RETRY_SCHEDULER_POLL_INTERVAL_MS || '500', 10);
+  const retrySchedulerBatchSize = parseInt(process.env.RETRY_SCHEDULER_BATCH_SIZE || '50', 10);
+  const retrySchedulerLeaseTtlMs = parseInt(process.env.RETRY_SCHEDULER_LEASE_TTL_MS || '30000', 10);
+
   return {
     port,
     nodeEnv,
@@ -86,6 +107,15 @@ function loadEnvironment(): Environment {
     kafkaConsumerGroupId,
     kafkaConsumerConcurrency,
     notificationProcessingMode,
+    retryBaseDelayMs,
+    retryMaxDelayMs,
+    retryMaxAttempts,
+    retryJitterFactor,
+    kafkaRetryConsumerGroupId,
+    kafkaRetryConsumerConcurrency,
+    retrySchedulerPollIntervalMs,
+    retrySchedulerBatchSize,
+    retrySchedulerLeaseTtlMs,
   };
 }
 
