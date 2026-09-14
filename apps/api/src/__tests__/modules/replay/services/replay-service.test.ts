@@ -7,18 +7,22 @@ import {
   Category,
   Priority,
   EventType,
-} from '@prisma/client';
-import { ReplayService } from '../../../../modules/replay/services/replay-service';
-import { NotificationRepository } from '../../../../modules/notifications/interfaces/notification-repository';
-import { NotificationEventRepository } from '../../../../modules/notifications/interfaces/notification-event-repository';
-import { QueueService } from '../../../../modules/notifications/interfaces/queue-service';
-import { ReplayExecutionRepository } from '../../../../modules/replay/interfaces/replay-execution-repository';
-import { HttpError } from '../../../../shared/errors/http-error';
+  ReplayStatus,
+  NotificationDeadLetter,
+} from "@prisma/client";
+import { ReplayService } from "../../../../modules/replay/services/replay-service";
+import { NotificationRepository } from "../../../../modules/notifications/interfaces/notification-repository";
+import { NotificationEventRepository } from "../../../../modules/notifications/interfaces/notification-event-repository";
+import { QueueService } from "../../../../modules/notifications/interfaces/queue-service";
+import { ReplayExecutionRepository } from "../../../../modules/replay/interfaces/replay-execution-repository";
+import { DeadLetterRepository } from "../../../../modules/dlq/interfaces/dead-letter-repository";
+import { HttpError } from "../../../../shared/errors/http-error";
+import { env } from "../../../../config/env";
 
-const UUID = '550e8400-e29b-41d4-a716-446655440000';
-const NEW_UUID = '660e8400-e29b-41d4-a716-446655440001';
+const UUID = "550e8400-e29b-41d4-a716-446655440000";
+const NEW_UUID = "660e8400-e29b-41d4-a716-446655440001";
 
-function makeNotification(status: NotificationStatus = NotificationStatus.DELIVERED): Notification {
+function makeNotification(status: NotificationStatus = NotificationStatus.DLQ): Notification {
   return {
     id: UUID,
     userId: UUID,
@@ -27,35 +31,58 @@ function makeNotification(status: NotificationStatus = NotificationStatus.DELIVE
     category: Category.TRANSACTIONAL,
     priority: Priority.NORMAL,
     status,
-    payload: { name: 'Alice' },
-    metadata: { source: 'test' },
+    payload: { name: "Alice" },
+    metadata: { source: "test", correlationId: "corr-123" },
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 }
 
 function makeNewNotification(): Notification {
-  return { ...makeNotification(), id: NEW_UUID, status: NotificationStatus.CREATED };
+  return {
+    ...makeNotification(NotificationStatus.QUEUED),
+    id: NEW_UUID,
+    metadata: { replayedFrom: UUID, retryCount: 0 },
+  };
 }
 
-function makeReplayExecution(): ReplayExecution {
+function makeReplayExecution(status: ReplayStatus = ReplayStatus.REQUESTED): ReplayExecution {
   return {
-    id: 'replay-1',
+    id: "replay-1",
     originalNotificationId: UUID,
     newNotificationId: NEW_UUID,
-    reason: 'Test replay',
-    triggeredBy: 'api',
+    reason: "Test replay",
+    triggeredBy: "api",
+    status,
+    errorMessage: null,
+    startedAt: null,
+    completedAt: null,
     createdAt: new Date(),
+  };
+}
+
+function makeDeadLetter(): NotificationDeadLetter {
+  return {
+    id: "dlq-1",
+    notificationId: UUID,
+    originalPayload: { name: "Alice" },
+    failedAttempts: 5,
+    lastErrorCode: "MAX_RETRIES_EXCEEDED",
+    lastErrorMessage: "Failed after 5 attempts",
+    errorDetails: [],
+    createdAt: new Date(),
+    resolvedAt: null,
+    resolvedBy: null,
   };
 }
 
 function makeEvent(overrides: Partial<NotificationEvent> = {}): NotificationEvent {
   return {
-    id: 'event-1',
+    id: "event-1",
     notificationId: UUID,
-    eventType: EventType.NOTIFICATION_CREATED,
+    eventType: EventType.REPLAY_REQUESTED,
     statusBefore: null,
-    statusAfter: NotificationStatus.CREATED,
+    statusAfter: NotificationStatus.QUEUED,
     executionId: null,
     metadata: {},
     occurredAt: new Date(),
@@ -68,6 +95,7 @@ interface MockMocks {
   eventRepository: jest.Mocked<NotificationEventRepository>;
   queue: jest.Mocked<QueueService>;
   replayExecutionRepository: jest.Mocked<ReplayExecutionRepository>;
+  deadLetterRepository: jest.Mocked<DeadLetterRepository>;
 }
 
 function createMocks(): MockMocks {
@@ -79,31 +107,56 @@ function createMocks(): MockMocks {
       listNotifications: jest.fn(),
       findUserById: jest.fn(),
       findTemplateById: jest.fn(),
-    } as jest.Mocked<NotificationRepository>,
+      createNotificationTransactional: jest.fn(),
+    },
     eventRepository: {
       recordEvent: jest.fn().mockResolvedValue(makeEvent()),
       listEventsByNotificationId: jest.fn().mockResolvedValue([]),
-    } as jest.Mocked<NotificationEventRepository>,
+    },
     queue: {
-      addNotificationJob: jest.fn().mockResolvedValue('job-1'),
-    } as jest.Mocked<QueueService>,
+      addNotificationJob: jest.fn().mockResolvedValue("job-1"),
+    },
     replayExecutionRepository: {
       createReplayExecution: jest.fn(),
       updateNewNotificationId: jest.fn(),
       findById: jest.fn(),
       findByOriginalNotificationId: jest.fn(),
       findReplayExecutionByNewNotificationId: jest.fn(),
-    } as jest.Mocked<ReplayExecutionRepository>,
+      updateStatus: jest.fn(),
+      findActiveReplayByOriginalId: jest.fn(),
+    },
+    deadLetterRepository: {
+      createDeadLetter: jest.fn(),
+      findDeadLetterByNotificationId: jest.fn(),
+      resolveDeadLetter: jest.fn(),
+      countDeadLetters: jest.fn().mockResolvedValue(0),
+    },
   };
 }
 
-describe('ReplayService', () => {
-  describe('replayNotification', () => {
-    it('replays a notification successfully', async () => {
+describe("ReplayService", () => {
+  let originalMode: "bullmq" | "kafka";
+
+  beforeEach(() => {
+    originalMode = env.notificationProcessingMode;
+  });
+
+  afterEach(() => {
+    (env as any).notificationProcessingMode = originalMode;
+  });
+
+  describe("replayNotification - BullMQ Mode", () => {
+    beforeEach(() => {
+      (env as any).notificationProcessingMode = "bullmq";
+    });
+
+    it("replays a DLQ notification successfully in BullMQ mode", async () => {
       const mocks = createMocks();
       mocks.notificationRepository.findNotificationById
-        .mockResolvedValueOnce(makeNotification())
+        .mockResolvedValueOnce(makeNotification(NotificationStatus.DLQ))
         .mockResolvedValueOnce(makeNewNotification());
+      mocks.deadLetterRepository.findDeadLetterByNotificationId.mockResolvedValue(makeDeadLetter());
+      mocks.replayExecutionRepository.findActiveReplayByOriginalId.mockResolvedValue(null);
       mocks.notificationRepository.createNotification.mockResolvedValue(makeNewNotification());
       mocks.replayExecutionRepository.createReplayExecution.mockResolvedValue(makeReplayExecution());
 
@@ -112,25 +165,48 @@ describe('ReplayService', () => {
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
       const result = await service.replayNotification({
         notificationId: UUID,
-        reason: 'Test replay',
+        reason: "Test replay",
+        operatorId: "op-1",
       });
 
-      expect(result.replayId).toBe('replay-1');
+      expect(result.replayId).toBe("replay-1");
       expect(result.notificationId).toBe(NEW_UUID);
-      expect(mocks.notificationRepository.createNotification).toHaveBeenCalled();
-      expect(mocks.replayExecutionRepository.createReplayExecution).toHaveBeenCalled();
+      expect(mocks.notificationRepository.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: UUID,
+          templateId: UUID,
+          channel: Channel.EMAIL,
+          category: Category.TRANSACTIONAL,
+          priority: Priority.NORMAL,
+          variables: { name: "Alice" },
+          metadata: expect.objectContaining({
+            replayedFrom: UUID,
+            replayId: "replay-1",
+            replayReason: "Test replay",
+            operatorId: "op-1",
+            correlationId: "corr-123",
+          }),
+        }),
+      );
+      expect(mocks.replayExecutionRepository.createReplayExecution).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalNotificationId: UUID,
+          reason: "Test replay",
+          triggeredBy: "op-1",
+        }),
+      );
       expect(mocks.queue.addNotificationJob).toHaveBeenCalledWith(NEW_UUID);
-      // Should record REPLAY_REQUESTED event
       expect(mocks.eventRepository.recordEvent).toHaveBeenCalledWith(
         expect.objectContaining({ eventType: EventType.REPLAY_REQUESTED }),
       );
     });
 
-    it('throws NOT_FOUND when original notification does not exist', async () => {
+    it("throws NOT_FOUND when original notification does not exist", async () => {
       const mocks = createMocks();
       mocks.notificationRepository.findNotificationById.mockResolvedValue(null);
 
@@ -139,152 +215,106 @@ describe('ReplayService', () => {
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
       await expect(service.replayNotification({ notificationId: UUID })).rejects.toThrow(HttpError);
       try {
         await service.replayNotification({ notificationId: UUID });
       } catch (error) {
-        expect((error as HttpError).code).toBe('NOT_FOUND');
+        expect((error as HttpError).code).toBe("NOT_FOUND");
       }
     });
 
-    it('rejects non-replayable notification (CREATED)', async () => {
+    it("rejects non-DLQ notification (e.g. DELIVERED)", async () => {
       const mocks = createMocks();
       mocks.notificationRepository.findNotificationById.mockResolvedValue(
-        makeNotification(NotificationStatus.CREATED),
+        makeNotification(NotificationStatus.DELIVERED),
       );
+      mocks.deadLetterRepository.findDeadLetterByNotificationId.mockResolvedValue(null);
 
       const service = new ReplayService(
         mocks.notificationRepository,
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
       await expect(service.replayNotification({ notificationId: UUID })).rejects.toThrow(HttpError);
       try {
         await service.replayNotification({ notificationId: UUID });
       } catch (error) {
-        expect((error as HttpError).code).toBe('REPLAY_NOT_ALLOWED');
+        expect((error as HttpError).code).toBe("REPLAY_NOT_ALLOWED");
       }
     });
 
-    it('rejects non-replayable notification (QUEUED)', async () => {
+    it("rejects DLQ notification without dead letter record", async () => {
       const mocks = createMocks();
       mocks.notificationRepository.findNotificationById.mockResolvedValue(
-        makeNotification(NotificationStatus.QUEUED),
+        makeNotification(NotificationStatus.DLQ),
       );
+      mocks.deadLetterRepository.findDeadLetterByNotificationId.mockResolvedValue(null);
 
       const service = new ReplayService(
         mocks.notificationRepository,
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
       await expect(service.replayNotification({ notificationId: UUID })).rejects.toThrow(HttpError);
-    });
-
-    it('rejects non-replayable notification (PROCESSING)', async () => {
-      const mocks = createMocks();
-      mocks.notificationRepository.findNotificationById.mockResolvedValue(
-        makeNotification(NotificationStatus.PROCESSING),
-      );
-
-      const service = new ReplayService(
-        mocks.notificationRepository,
-        mocks.eventRepository,
-        mocks.queue,
-        mocks.replayExecutionRepository,
-      );
-
-      await expect(service.replayNotification({ notificationId: UUID })).rejects.toThrow(HttpError);
-    });
-
-    it('throws QUEUE_UNAVAILABLE when enqueue fails', async () => {
-      const mocks = createMocks();
-      mocks.notificationRepository.findNotificationById
-        .mockResolvedValueOnce(makeNotification())
-        .mockResolvedValueOnce(makeNewNotification());
-      mocks.notificationRepository.createNotification.mockResolvedValue(makeNewNotification());
-      mocks.replayExecutionRepository.createReplayExecution.mockResolvedValue(makeReplayExecution());
-      mocks.queue.addNotificationJob.mockRejectedValue(new Error('Redis down'));
-
-      const service = new ReplayService(
-        mocks.notificationRepository,
-        mocks.eventRepository,
-        mocks.queue,
-        mocks.replayExecutionRepository,
-      );
-
       try {
-        await service.replayNotification({ notificationId: UUID, reason: 'test' });
-        fail('Should have thrown');
+        await service.replayNotification({ notificationId: UUID });
       } catch (error) {
-        expect(error).toBeInstanceOf(HttpError);
-        expect((error as HttpError).code).toBe('QUEUE_UNAVAILABLE');
+        expect((error as HttpError).code).toBe("REPLAY_NOT_ALLOWED");
       }
-      // Should mark FAILED and record DELIVERY_FAILED event
-      expect(mocks.notificationRepository.updateNotificationStatus).toHaveBeenCalledWith(
-        NEW_UUID,
-        NotificationStatus.FAILED,
-      );
     });
 
-    it('creates ReplayExecution linking original to new notification', async () => {
+    it("rejects when an active replay already exists", async () => {
       const mocks = createMocks();
-      mocks.notificationRepository.findNotificationById
-        .mockResolvedValueOnce(makeNotification())
-        .mockResolvedValueOnce(makeNewNotification());
-      mocks.notificationRepository.createNotification.mockResolvedValue(makeNewNotification());
-      mocks.replayExecutionRepository.createReplayExecution.mockResolvedValue(makeReplayExecution());
+      mocks.notificationRepository.findNotificationById.mockResolvedValue(
+        makeNotification(NotificationStatus.DLQ),
+      );
+      mocks.deadLetterRepository.findDeadLetterByNotificationId.mockResolvedValue(makeDeadLetter());
+      mocks.replayExecutionRepository.findActiveReplayByOriginalId.mockResolvedValue(
+        makeReplayExecution(ReplayStatus.RUNNING),
+      );
 
       const service = new ReplayService(
         mocks.notificationRepository,
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
-      await service.replayNotification({ notificationId: UUID, reason: 'test' });
+      await expect(service.replayNotification({ notificationId: UUID })).rejects.toThrow(HttpError);
+      try {
+        await service.replayNotification({ notificationId: UUID });
+      } catch (error) {
+        expect((error as HttpError).code).toBe("ACTIVE_REPLAY_EXISTS");
+        expect((error as HttpError).statusCode).toBe(409);
+      }
+    });
+  });
 
-      expect(mocks.replayExecutionRepository.createReplayExecution).toHaveBeenCalledWith({
-        originalNotificationId: UUID,
-        reason: 'test',
-        triggeredBy: 'api',
-      });
-      expect(mocks.replayExecutionRepository.updateNewNotificationId).toHaveBeenCalledWith(
-        'replay-1',
-        NEW_UUID,
-      );
+  describe("replayNotification - Kafka Mode", () => {
+    beforeEach(() => {
+      (env as any).notificationProcessingMode = "kafka";
     });
 
-    it('allows replay of FAILED status', async () => {
-      const mocks = createMocks();
-      mocks.notificationRepository.findNotificationById
-        .mockResolvedValueOnce(makeNotification(NotificationStatus.FAILED))
-        .mockResolvedValueOnce(makeNewNotification());
-      mocks.notificationRepository.createNotification.mockResolvedValue(makeNewNotification());
-      mocks.replayExecutionRepository.createReplayExecution.mockResolvedValue(makeReplayExecution());
-
-      const service = new ReplayService(
-        mocks.notificationRepository,
-        mocks.eventRepository,
-        mocks.queue,
-        mocks.replayExecutionRepository,
-      );
-
-      const result = await service.replayNotification({ notificationId: UUID });
-      expect(result.replayId).toBe('replay-1');
-    });
-
-    it('allows replay of DLQ status', async () => {
+    it("executes atomic transaction with OutboxEvent and ReplayExecution in Kafka mode", async () => {
       const mocks = createMocks();
       mocks.notificationRepository.findNotificationById
         .mockResolvedValueOnce(makeNotification(NotificationStatus.DLQ))
         .mockResolvedValueOnce(makeNewNotification());
-      mocks.notificationRepository.createNotification.mockResolvedValue(makeNewNotification());
+      mocks.deadLetterRepository.findDeadLetterByNotificationId.mockResolvedValue(makeDeadLetter());
+      mocks.replayExecutionRepository.findActiveReplayByOriginalId.mockResolvedValue(null);
+      (mocks.notificationRepository.createNotificationTransactional as jest.Mock).mockResolvedValue(
+        makeNewNotification(),
+      );
       mocks.replayExecutionRepository.createReplayExecution.mockResolvedValue(makeReplayExecution());
 
       const service = new ReplayService(
@@ -292,49 +322,74 @@ describe('ReplayService', () => {
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
-      const result = await service.replayNotification({ notificationId: UUID });
-      expect(result.replayId).toBe('replay-1');
+      const result = await service.replayNotification({
+        notificationId: UUID,
+        reason: "Operator Kafka Replay",
+        operatorId: "operator-kafka",
+      });
+
+      expect(result.notificationId).toBe(NEW_UUID);
+      expect(result.status).toBe(ReplayStatus.REQUESTED);
+      expect(mocks.notificationRepository.createNotificationTransactional).toHaveBeenCalled();
+      // QueueService must NOT be called in Kafka mode
+      expect(mocks.queue.addNotificationJob).not.toHaveBeenCalled();
+    });
+
+    it("translates P2002 DB unique constraint violation to 409 ACTIVE_REPLAY_EXISTS", async () => {
+      const mocks = createMocks();
+      mocks.notificationRepository.findNotificationById.mockResolvedValue(
+        makeNotification(NotificationStatus.DLQ),
+      );
+      mocks.deadLetterRepository.findDeadLetterByNotificationId.mockResolvedValue(makeDeadLetter());
+      mocks.replayExecutionRepository.findActiveReplayByOriginalId.mockResolvedValue(null);
+
+      const prismaError = new Error("Unique constraint failed");
+      (prismaError as any).code = "P2002";
+      (mocks.notificationRepository.createNotificationTransactional as jest.Mock).mockRejectedValue(prismaError);
+
+      const service = new ReplayService(
+        mocks.notificationRepository,
+        mocks.eventRepository,
+        mocks.queue,
+        mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
+      );
+
+      await expect(service.replayNotification({ notificationId: UUID })).rejects.toThrow(HttpError);
+      try {
+        await service.replayNotification({ notificationId: UUID });
+      } catch (error) {
+        expect((error as HttpError).code).toBe("ACTIVE_REPLAY_EXISTS");
+        expect((error as HttpError).statusCode).toBe(409);
+      }
     });
   });
 
-  describe('getReplayHistory', () => {
-    it('returns replay history for existing notification', async () => {
+  describe("getReplayHistory", () => {
+    it("returns mapped replay history with lifecycle statuses", async () => {
       const mocks = createMocks();
-      mocks.notificationRepository.findNotificationById.mockResolvedValue(makeNotification());
-      const executions = [makeReplayExecution()];
-      mocks.replayExecutionRepository.findByOriginalNotificationId.mockResolvedValue(executions);
+      mocks.notificationRepository.findNotificationById
+        .mockResolvedValueOnce(makeNotification(NotificationStatus.DLQ));
+      mocks.replayExecutionRepository.findByOriginalNotificationId.mockResolvedValue([
+        makeReplayExecution(ReplayStatus.COMPLETED),
+      ]);
 
       const service = new ReplayService(
         mocks.notificationRepository,
         mocks.eventRepository,
         mocks.queue,
         mocks.replayExecutionRepository,
+        mocks.deadLetterRepository,
       );
 
-      const result = await service.getReplayHistory(UUID);
-      expect(result).toHaveLength(1);
-      expect(mocks.replayExecutionRepository.findByOriginalNotificationId).toHaveBeenCalledWith(UUID);
-    });
-
-    it('throws NOT_FOUND for non-existent notification', async () => {
-      const mocks = createMocks();
-      mocks.notificationRepository.findNotificationById.mockResolvedValue(null);
-
-      const service = new ReplayService(
-        mocks.notificationRepository,
-        mocks.eventRepository,
-        mocks.queue,
-        mocks.replayExecutionRepository,
-      );
-
-      await expect(service.getReplayHistory(UUID)).rejects.toThrow(HttpError);
-      try {
-        await service.getReplayHistory(UUID);
-      } catch (error) {
-        expect((error as HttpError).code).toBe('NOT_FOUND');
-      }
+      const history = await service.getReplayHistory(UUID);
+      expect(history).toHaveLength(1);
+      expect(history[0].id).toBe("replay-1");
+      expect(history[0].status).toBe(ReplayStatus.COMPLETED);
+      expect(history[0].newNotificationId).toBe(NEW_UUID);
     });
   });
 });

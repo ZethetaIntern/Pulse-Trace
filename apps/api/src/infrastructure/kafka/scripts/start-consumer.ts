@@ -1,18 +1,26 @@
 import { NotificationConsumer } from '../notification-consumer';
 import { notificationService } from '../../../modules/notifications/composition';
+import { PrismaNotificationRepository } from '../../../modules/notifications/repositories/prisma-notification-repository';
 import { PrismaNotificationEventRepository } from '../../../modules/notifications/repositories/prisma-notification-event-repository';
 import { PrismaReplayExecutionRepository } from '../../../modules/replay/repositories/prisma-replay-execution-repository';
+import { PrismaDeadLetterRepository } from '../../../modules/dlq/repositories/prisma-dead-letter-repository';
 import { prisma } from '../../database/prisma';
 import { logger } from '../../logger';
 
 async function main(): Promise<void> {
   const eventRepository = new PrismaNotificationEventRepository(prisma);
   const replayExecutionRepository = new PrismaReplayExecutionRepository(prisma);
+  const deadLetterRepository = new PrismaDeadLetterRepository(prisma);
+  const notificationRepository = new PrismaNotificationRepository(prisma);
 
   const consumer = new NotificationConsumer(
     notificationService,
     eventRepository,
     replayExecutionRepository,
+    {
+      deadLetterRepository,
+      notificationRepository,
+    },
   );
 
   let isShuttingDown = false;

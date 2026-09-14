@@ -67,6 +67,8 @@ describe('NotificationConsumer Unit Tests', () => {
       updateNewNotificationId: jest.fn(),
       findById: jest.fn(),
       findByOriginalNotificationId: jest.fn(),
+      updateStatus: jest.fn().mockResolvedValue({} as any),
+      findActiveReplayByOriginalId: jest.fn().mockResolvedValue(null),
     };
 
     consumer = new NotificationConsumer(
@@ -148,6 +150,10 @@ describe('NotificationConsumer Unit Tests', () => {
       newNotificationId: 'notif-101',
       reason: 'Network failure rerun',
       triggeredBy: 'admin',
+      status: 'REQUESTED' as any,
+      errorMessage: null,
+      startedAt: null,
+      completedAt: null,
       createdAt: new Date(),
     });
 

@@ -80,6 +80,18 @@ export class PrismaNotificationRepository implements NotificationRepository {
         }
       }
 
+      if (input.replayExecution) {
+        await tx.replayExecution.create({
+          data: {
+            originalNotificationId: input.replayExecution.originalNotificationId,
+            newNotificationId: notification.id,
+            reason: input.replayExecution.reason,
+            triggeredBy: input.replayExecution.triggeredBy,
+            status: 'REQUESTED',
+          },
+        });
+      }
+
       if (input.outbox) {
         // Ensure the payload references the actual persisted notificationId
         const payloadWithId = {

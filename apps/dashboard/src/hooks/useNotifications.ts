@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getHealth,
   getNotification,
+  getDeadLetter,
   getReplayHistory,
   getTimeline,
   listNotifications,
@@ -40,6 +41,14 @@ export function useTimeline(id: string) {
   });
 }
 
+export function useDeadLetter(id: string, enabled = true) {
+  return useQuery({
+    queryKey: ['deadLetter', id],
+    queryFn: () => getDeadLetter(id),
+    enabled: !!id && enabled,
+  });
+}
+
 export function useReplayHistory(id: string) {
   return useQuery({
     queryKey: ['replays', id],
@@ -56,6 +65,7 @@ export function useReplayNotification(id: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['replays', id] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['deadLetter', id] });
     },
   });
 }

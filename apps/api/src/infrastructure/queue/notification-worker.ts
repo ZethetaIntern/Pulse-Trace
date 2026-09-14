@@ -1,10 +1,11 @@
 import { Worker } from 'bullmq';
-import { EventType, NotificationStatus } from '@prisma/client';
+import { EventType, NotificationStatus, ReplayStatus } from '@prisma/client';
 import {
   NotificationProcessingService,
 } from '../../modules/notifications/interfaces/notification-processing-service';
 import { NotificationEventRepository } from '../../modules/notifications/interfaces/notification-event-repository';
 import { ReplayExecutionRepository } from '../../modules/replay/interfaces/replay-execution-repository';
+import { DeadLetterRepository } from '../../modules/dlq/interfaces/dead-letter-repository';
 import { logger } from '../logger';
 import { connection } from './bullmq';
 import { NOTIFICATION_JOB_NAME, NOTIFICATION_QUEUE_NAME, NotificationJobData } from './notification-queue';
@@ -29,6 +30,7 @@ export class NotificationWorker {
     private readonly processor: NotificationProcessingService,
     private readonly eventRepository: NotificationEventRepository,
     private readonly replayExecutionRepository: ReplayExecutionRepository,
+    private readonly deadLetterRepository?: DeadLetterRepository,
   ) {
     this.worker = new Worker<NotificationJobData>(
       NOTIFICATION_QUEUE_NAME,
@@ -41,15 +43,15 @@ export class NotificationWorker {
         const notificationId = job.data.notificationId;
 
         // Detect whether this notification belongs to a replay execution.
-        // Original notifications have no ReplayExecution record pointing to them;
-        // replayed notifications are linked via newNotificationId.
         const replayExecution = await this.replayExecutionRepository
           .findReplayExecutionByNewNotificationId(notificationId);
 
         if (replayExecution) {
-          // REPLAY_STARTED represents the beginning of replay execution.
-          // The notification status was QUEUED when the job was picked up;
-          // it transitions to PROCESSING as part of normal processing.
+          await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+            status: ReplayStatus.RUNNING,
+            startedAt: new Date(),
+          });
+
           await this.eventRepository.recordEvent({
             notificationId,
             eventType: EventType.REPLAY_STARTED,
@@ -64,31 +66,50 @@ export class NotificationWorker {
           });
         }
 
-        // Delegate to the normal notification processing pipeline.
-        await this.processor.processNotification(notificationId, {
-          jobId: job.id,
-          workerId: NOTIFICATION_WORKER_NAME,
-          attemptNumber: job.attemptsMade + 1,
-          maxAttempts: job.opts.attempts ?? 1,
-        });
-
-        // REPLAY_COMPLETED only after successful processing.
-        // On delivery failure, processNotification throws, so this line is
-        // skipped — matching the spec: "On delivery failure, do NOT emit
-        // REPLAY_COMPLETED."
-        if (replayExecution) {
-          await this.eventRepository.recordEvent({
-            notificationId,
-            eventType: EventType.REPLAY_COMPLETED,
-            statusBefore: NotificationStatus.DELIVERED,
-            statusAfter: NotificationStatus.DELIVERED,
-            executionId: job.id,
-            metadata: {
-              originalNotificationId: replayExecution.originalNotificationId,
-              replayId: replayExecution.id,
-              workerId: NOTIFICATION_WORKER_NAME,
-            },
+        try {
+          // Delegate to the normal notification processing pipeline.
+          await this.processor.processNotification(notificationId, {
+            jobId: job.id,
+            workerId: NOTIFICATION_WORKER_NAME,
+            attemptNumber: job.attemptsMade + 1,
+            maxAttempts: job.opts.attempts ?? 1,
           });
+
+          if (replayExecution) {
+            await this.eventRepository.recordEvent({
+              notificationId,
+              eventType: EventType.REPLAY_COMPLETED,
+              statusBefore: NotificationStatus.DELIVERED,
+              statusAfter: NotificationStatus.DELIVERED,
+              executionId: job.id,
+              metadata: {
+                originalNotificationId: replayExecution.originalNotificationId,
+                replayId: replayExecution.id,
+                workerId: NOTIFICATION_WORKER_NAME,
+              },
+            });
+
+            await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+              status: ReplayStatus.COMPLETED,
+              completedAt: new Date(),
+            });
+
+            if (this.deadLetterRepository) {
+              await this.deadLetterRepository.resolveDeadLetter(
+                replayExecution.originalNotificationId,
+                replayExecution.triggeredBy || undefined,
+              );
+            }
+          }
+        } catch (error) {
+          if (replayExecution && job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+            await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+              status: ReplayStatus.FAILED,
+              errorMessage: (error as Error).message,
+              completedAt: new Date(),
+            });
+          }
+          throw error;
         }
       },
       {

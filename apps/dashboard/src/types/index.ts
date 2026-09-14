@@ -77,21 +77,46 @@ export interface TimelineEventResponse {
 }
 
 // ============================================================
+// DLQ / Dead Letter
+// ============================================================
+
+export interface DeadLetterResponse {
+  id: string;
+  notificationId: string;
+  originalPayload: Record<string, unknown>;
+  failedAttempts: number;
+  lastErrorCode: string | null;
+  lastErrorMessage: string | null;
+  errorDetails: Array<{ attempt?: number; error?: string; [key: string]: unknown }>;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+}
+
+// ============================================================
 // Replay
 // ============================================================
 
+export type ReplayStatus = 'REQUESTED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+
 export interface ReplayNotificationResponse {
   replayId: string;
+  originalNotificationId: string;
   notificationId: string;
+  status: ReplayStatus;
 }
 
 export interface ReplayExecutionResponse {
   replayId: string;
   originalNotificationId: string;
   newNotificationId: string | null;
+  status: ReplayStatus;
   reason: string | null;
   triggeredBy: string | null;
+  errorMessage: string | null;
   createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
   newNotificationStatus?: string;
 }
 

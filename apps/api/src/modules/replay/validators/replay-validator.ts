@@ -4,18 +4,6 @@ import { ReplayNotificationDto } from '../dto/replay-notification.dto';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/**
- * Notification statuses that are NOT eligible for replay.
- * Per the documentation: "Allow developers to execute a previously processed
- * notification again." Notifications still in progress (CREATED, QUEUED,
- * PROCESSING) cannot be replayed.
- */
-const NON_REPLAYABLE_STATUSES: readonly NotificationStatus[] = [
-  NotificationStatus.CREATED,
-  NotificationStatus.QUEUED,
-  NotificationStatus.PROCESSING,
-];
-
 function isUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_PATTERN.test(value);
 }
@@ -52,6 +40,11 @@ export function validateReplayRequest(
         { field: 'reason', message: 'must be a string' },
       ]);
     }
+    if (record.operatorId !== undefined && record.operatorId !== null && typeof record.operatorId !== 'string') {
+      throw new HttpError('Validation failed', 400, 'INVALID_REQUEST', [
+        { field: 'operatorId', message: 'must be a string' },
+      ]);
+    }
   }
 
   const reason =
@@ -62,23 +55,33 @@ export function validateReplayRequest(
       ? (body as Record<string, unknown>).reason
       : undefined;
 
+  const operatorId =
+    body !== undefined &&
+    body !== null &&
+    typeof body === 'object' &&
+    !Array.isArray(body)
+      ? (body as Record<string, unknown>).operatorId
+      : undefined;
+
   return {
     notificationId,
     ...(reason !== undefined && reason !== null && typeof reason === 'string' && { reason }),
+    ...(operatorId !== undefined && operatorId !== null && typeof operatorId === 'string' && { operatorId }),
   };
 }
 
 /**
  * Checks whether a notification status allows replay.
- * Throws REPLAY_NOT_ALLOWED if the notification is still in progress.
+ * In Phase 20 (DLQ & Operator Replay), replay is restricted specifically to
+ * notifications in the Dead-Letter Queue (DLQ).
  */
-export function assertReplayable(status: NotificationStatus): void {
-  if (NON_REPLAYABLE_STATUSES.includes(status)) {
+export function assertReplayable(status: NotificationStatus, hasDeadLetter?: boolean): void {
+  if (status !== NotificationStatus.DLQ || (hasDeadLetter !== undefined && !hasDeadLetter)) {
     throw new HttpError(
-      'Notification is not in a replable state',
+      'Notification is not eligible for replay. Only notifications in Dead-Letter Queue (DLQ) can be replayed',
       400,
       'REPLAY_NOT_ALLOWED',
-      [{ field: 'status', message: `cannot replay a notification with status ${status}` }],
+      [{ field: 'status', message: `cannot replay a notification with status ${status}; must be DLQ` }],
     );
   }
 }

@@ -104,6 +104,14 @@ export function getTimeline(id: string): Promise<TimelineEventResponse[]> {
 }
 
 // ============================================================
+// DLQ
+// ============================================================
+
+export function getDeadLetter(id: string): Promise<import('../types').DeadLetterResponse> {
+  return request<import('../types').DeadLetterResponse>(`${BASE_URL}/notifications/${id}/dlq`);
+}
+
+// ============================================================
 // Replay
 // ============================================================
 

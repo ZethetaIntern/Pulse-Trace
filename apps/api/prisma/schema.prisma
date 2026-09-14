@@ -202,20 +202,32 @@ model NotificationEvent {
   @@map("NotificationEvents")
 }
 
+enum ReplayStatus {
+  REQUESTED
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 /// Replay operations. Original history is never modified.
 model ReplayExecution {
-  id                     String   @id @default(uuid())
+  id                     String        @id @default(uuid())
   originalNotificationId String
   newNotificationId      String?
+  status                 ReplayStatus  @default(REQUESTED)
   reason                 String?
   triggeredBy            String?
-  createdAt              DateTime @default(now())
+  errorMessage           String?
+  createdAt              DateTime      @default(now())
+  startedAt              DateTime?
+  completedAt            DateTime?
 
   originalNotification Notification  @relation("OriginalNotificationReplays", fields: [originalNotificationId], references: [id], onDelete: Restrict)
   newNotification      Notification? @relation("NewNotificationReplays", fields: [newNotificationId], references: [id], onDelete: Restrict)
 
   @@index([originalNotificationId])
   @@index([newNotificationId])
+  @@index([status])
   @@map("ReplayExecutions")
 }
 

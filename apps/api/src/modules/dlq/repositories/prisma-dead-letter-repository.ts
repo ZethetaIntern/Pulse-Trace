@@ -31,6 +31,20 @@ export class PrismaDeadLetterRepository implements DeadLetterRepository {
     });
   }
 
+  async resolveDeadLetter(notificationId: string, resolvedBy?: string): Promise<NotificationDeadLetter | null> {
+    const existing = await this.db.notificationDeadLetter.findUnique({ where: { notificationId } });
+    if (!existing) {
+      return null;
+    }
+    return this.db.notificationDeadLetter.update({
+      where: { notificationId },
+      data: {
+        resolvedAt: new Date(),
+        ...(resolvedBy ? { resolvedBy } : {}),
+      },
+    });
+  }
+
   countDeadLetters(): Promise<number> {
     return this.db.notificationDeadLetter.count();
   }

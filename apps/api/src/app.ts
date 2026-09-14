@@ -4,6 +4,7 @@ import path from 'path';
 import { env } from './config/env';
 import { logger } from './infrastructure/logger';
 import { analyticsRoutes } from './modules/analytics';
+import { dlqRoutes } from './modules/dlq';
 import { monitoringRoutes } from './modules/monitoring';
 import { notificationRoutes } from './modules/notifications';
 import { readinessRoutes } from './modules/readiness';
@@ -87,6 +88,7 @@ const postOnlyRateLimit: express.RequestHandler = (req, res, next) => {
 };
 app.use('/api/v1/notifications', postOnlyRateLimit, notificationRoutes);
 app.use('/api/v1/notifications', postOnlyRateLimit, replayRoutes);
+app.use('/api/v1/notifications', dlqRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/monitoring', monitoringRoutes);
 app.use('/health', readinessRoutes);

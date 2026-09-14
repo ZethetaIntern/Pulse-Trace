@@ -1,6 +1,7 @@
 import { notificationQueue } from '../../infrastructure/queue/notification-queue';
 import { PrismaNotificationEventRepository } from '../notifications/repositories/prisma-notification-event-repository';
 import { PrismaNotificationRepository } from '../notifications/repositories/prisma-notification-repository';
+import { PrismaDeadLetterRepository } from '../dlq/repositories/prisma-dead-letter-repository';
 import { PrismaReplayExecutionRepository } from './repositories/prisma-replay-execution-repository';
 import { ReplayService } from './services/replay-service';
 
@@ -13,4 +14,5 @@ export const replayService = new ReplayService(
   new PrismaNotificationEventRepository(),
   notificationQueue,
   new PrismaReplayExecutionRepository(),
+  new PrismaDeadLetterRepository(),
 );

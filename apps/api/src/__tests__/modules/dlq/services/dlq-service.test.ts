@@ -16,6 +16,7 @@ describe('DlqService Unit Tests', () => {
     mockDeadLetterRepo = {
       createDeadLetter: jest.fn().mockResolvedValue({} as any),
       findDeadLetterByNotificationId: jest.fn().mockResolvedValue(null),
+      resolveDeadLetter: jest.fn().mockResolvedValue(null),
       countDeadLetters: jest.fn().mockResolvedValue(0),
     };
 

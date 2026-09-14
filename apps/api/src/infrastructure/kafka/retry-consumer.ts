@@ -1,5 +1,5 @@
 import { Consumer, EachMessagePayload, Kafka } from 'kafkajs';
-import { EventType, NotificationStatus } from '@prisma/client';
+import { EventType, NotificationStatus, ReplayStatus } from '@prisma/client';
 import { env } from '../../config/env';
 import { logger } from '../logger';
 import { createKafkaInstance } from './kafka-client';
@@ -7,10 +7,12 @@ import { MessageValidator } from './message-validator';
 import { NotificationProcessingService } from '../../modules/notifications/interfaces/notification-processing-service';
 import { NotificationEventRepository } from '../../modules/notifications/interfaces/notification-event-repository';
 import { NotificationRepository } from '../../modules/notifications/interfaces/notification-repository';
+import { ReplayExecutionRepository } from '../../modules/replay/interfaces/replay-execution-repository';
 import { FailureClassifier } from '../../modules/retry/services/failure-classifier';
 import { BackoffCalculator } from '../../modules/retry/services/backoff-calculator';
 import { RetryScheduler, RETRY_TOPIC } from '../../modules/retry/services/retry-scheduler';
 import { DlqService } from '../../modules/dlq/services/dlq-service';
+import { DeadLetterRepository } from '../../modules/dlq/interfaces/dead-letter-repository';
 
 export interface RetryConsumerOptions {
   groupId?: string;
@@ -21,6 +23,8 @@ export interface RetryConsumerOptions {
   retryScheduler?: RetryScheduler;
   dlqService?: DlqService;
   notificationRepository?: NotificationRepository;
+  replayExecutionRepository?: ReplayExecutionRepository;
+  deadLetterRepository?: DeadLetterRepository;
 }
 
 export interface RetryConsumerStatus {
@@ -43,6 +47,8 @@ export class RetryConsumer {
   private readonly retryScheduler?: RetryScheduler;
   private readonly dlqService?: DlqService;
   private readonly notificationRepository?: NotificationRepository;
+  private readonly replayExecutionRepository?: ReplayExecutionRepository;
+  private readonly deadLetterRepository?: DeadLetterRepository;
 
   private isRunning = false;
   private isConnected = false;
@@ -63,6 +69,8 @@ export class RetryConsumer {
     this.retryScheduler = options.retryScheduler;
     this.dlqService = options.dlqService;
     this.notificationRepository = options.notificationRepository;
+    this.replayExecutionRepository = options.replayExecutionRepository;
+    this.deadLetterRepository = options.deadLetterRepository;
 
     const kafka = options.kafka || createKafkaInstance();
     this.consumer = kafka.consumer({
@@ -191,6 +199,10 @@ export class RetryConsumer {
       'Processing retry notification from Kafka',
     );
 
+    const replayExecution = await this.replayExecutionRepository?.findReplayExecutionByNewNotificationId(
+      notificationId,
+    );
+
     try {
       // 2. Emit RETRY_STARTED event
       await this.eventRepository.recordEvent({
@@ -218,7 +230,39 @@ export class RetryConsumer {
         maxAttempts: env.retryMaxAttempts,
       });
 
-      // 4. Commit offset upon successful processing
+      // 4. Emit REPLAY_COMPLETED and mark ReplayExecution COMPLETED if this was a replayed notification
+      if (replayExecution) {
+        await this.eventRepository.recordEvent({
+          notificationId,
+          eventType: EventType.REPLAY_COMPLETED,
+          statusBefore: NotificationStatus.DELIVERED,
+          statusAfter: NotificationStatus.DELIVERED,
+          executionId: payload.eventId,
+          metadata: {
+            originalNotificationId: replayExecution.originalNotificationId,
+            replayId: replayExecution.id,
+            workerId: this.workerId,
+            topic,
+            partition,
+            offset: rawOffset,
+            correlationId: headers['x-correlation-id'],
+          },
+        });
+
+        await this.replayExecutionRepository?.updateStatus(replayExecution.id, {
+          status: ReplayStatus.COMPLETED,
+          completedAt: new Date(),
+        });
+
+        if (this.deadLetterRepository) {
+          await this.deadLetterRepository.resolveDeadLetter(
+            replayExecution.originalNotificationId,
+            replayExecution.triggeredBy || undefined,
+          );
+        }
+      }
+
+      // 5. Commit offset upon successful processing
       await this.commitOffsetSafe(topic, partition, nextOffset);
 
       this.totalProcessed += 1;
@@ -328,6 +372,14 @@ export class RetryConsumer {
       // 2. Permanent failure -> Move directly to DLQ
       if (!classification.isRetryable && this.dlqService) {
         try {
+          if (replayExecution) {
+            await this.replayExecutionRepository?.updateStatus(replayExecution.id, {
+              status: ReplayStatus.FAILED,
+              errorMessage: classification.errorMessage,
+              completedAt: new Date(),
+            });
+          }
+
           await this.dlqService.moveToDlq({
             notificationId,
             userId: payload.userId,
@@ -360,6 +412,14 @@ export class RetryConsumer {
       // 3. Max attempts exhausted (currentAttempt >= maxAttempts) -> Move to DLQ
       if (currentAttempt >= env.retryMaxAttempts && this.dlqService) {
         try {
+          if (replayExecution) {
+            await this.replayExecutionRepository?.updateStatus(replayExecution.id, {
+              status: ReplayStatus.FAILED,
+              errorMessage: `Max delivery attempts exhausted (${currentAttempt}/${env.retryMaxAttempts})`,
+              completedAt: new Date(),
+            });
+          }
+
           await this.dlqService.moveToDlq({
             notificationId,
             userId: payload.userId,

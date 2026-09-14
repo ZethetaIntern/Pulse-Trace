@@ -5,6 +5,7 @@ import { notificationQueue } from './infrastructure/queue/notification-queue';
 import { NotificationWorker } from './infrastructure/queue/notification-worker';
 import { PrismaNotificationEventRepository } from './modules/notifications/repositories/prisma-notification-event-repository';
 import { PrismaReplayExecutionRepository } from './modules/replay/repositories/prisma-replay-execution-repository';
+import { PrismaDeadLetterRepository } from './modules/dlq/repositories/prisma-dead-letter-repository';
 import { notificationService } from './modules/notifications/composition';
 import { monitoringRepository } from './modules/monitoring/composition';
 import { isShuttingDown, setShuttingDown } from './lifecycle/shutdown-state';
@@ -13,6 +14,7 @@ const notificationWorker = new NotificationWorker(
   notificationService,
   new PrismaNotificationEventRepository(),
   new PrismaReplayExecutionRepository(),
+  new PrismaDeadLetterRepository(),
 );
 
 const server = app.listen(env.port, () => {

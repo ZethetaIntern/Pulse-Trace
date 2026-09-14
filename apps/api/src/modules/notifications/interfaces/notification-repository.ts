@@ -21,6 +21,11 @@ export interface CreateNotificationTransactionalInput {
     partitionKey: string;
     payload: Record<string, unknown>;
   };
+  replayExecution?: {
+    originalNotificationId: string;
+    reason?: string;
+    triggeredBy?: string;
+  };
 }
 
 /**

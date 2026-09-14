@@ -1,5 +1,5 @@
 import { Consumer, EachMessagePayload, Kafka } from 'kafkajs';
-import { EventType, NotificationStatus } from '@prisma/client';
+import { EventType, NotificationStatus, ReplayStatus } from '@prisma/client';
 import { env } from '../../config/env';
 import { logger } from '../logger';
 import { createKafkaInstance } from './kafka-client';
@@ -12,6 +12,7 @@ import { FailureClassifier } from '../../modules/retry/services/failure-classifi
 import { BackoffCalculator } from '../../modules/retry/services/backoff-calculator';
 import { RetryScheduler } from '../../modules/retry/services/retry-scheduler';
 import { DlqService } from '../../modules/dlq/services/dlq-service';
+import { DeadLetterRepository } from '../../modules/dlq/interfaces/dead-letter-repository';
 
 export const CONSUMABLE_NOTIFICATION_TOPICS = [
   'notifications.high',
@@ -30,6 +31,7 @@ export interface NotificationConsumerOptions {
   retryScheduler?: RetryScheduler;
   dlqService?: DlqService;
   notificationRepository?: NotificationRepository;
+  deadLetterRepository?: DeadLetterRepository;
 }
 
 export interface ConsumerStatus {
@@ -52,6 +54,7 @@ export class NotificationConsumer {
   private readonly retryScheduler?: RetryScheduler;
   private readonly dlqService?: DlqService;
   private readonly notificationRepository?: NotificationRepository;
+  private readonly deadLetterRepository?: DeadLetterRepository;
 
   private isRunning = false;
   private isConnected = false;
@@ -73,6 +76,7 @@ export class NotificationConsumer {
     this.retryScheduler = options.retryScheduler;
     this.dlqService = options.dlqService;
     this.notificationRepository = options.notificationRepository;
+    this.deadLetterRepository = options.deadLetterRepository;
 
     const kafka = options.kafka || createKafkaInstance();
     this.consumer = kafka.consumer({
@@ -209,6 +213,11 @@ export class NotificationConsumer {
 
     try {
       if (replayExecution) {
+        await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+          status: ReplayStatus.RUNNING,
+          startedAt: new Date(),
+        });
+
         await this.eventRepository.recordEvent({
           notificationId,
           eventType: EventType.REPLAY_STARTED,
@@ -222,6 +231,7 @@ export class NotificationConsumer {
             topic,
             partition,
             offset: rawOffset,
+            correlationId: headers['x-correlation-id'],
           },
         });
       }
@@ -234,7 +244,7 @@ export class NotificationConsumer {
         maxAttempts: 1,
       });
 
-      // 4. Emit REPLAY_COMPLETED only upon successful delivery for replay executions
+      // 4. Emit REPLAY_COMPLETED and mark ReplayExecution COMPLETED only upon successful delivery
       if (replayExecution) {
         await this.eventRepository.recordEvent({
           notificationId,
@@ -249,8 +259,21 @@ export class NotificationConsumer {
             topic,
             partition,
             offset: rawOffset,
+            correlationId: headers['x-correlation-id'],
           },
         });
+
+        await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+          status: ReplayStatus.COMPLETED,
+          completedAt: new Date(),
+        });
+
+        if (this.deadLetterRepository) {
+          await this.deadLetterRepository.resolveDeadLetter(
+            replayExecution.originalNotificationId,
+            replayExecution.triggeredBy || undefined,
+          );
+        }
       }
 
       // 5. Commit offset ONLY upon successful notification processing
@@ -364,6 +387,14 @@ export class NotificationConsumer {
       // 2. Permanent failure -> Move directly to DLQ & commit Kafka offset
       if (!classification.isRetryable && this.dlqService) {
         try {
+          if (replayExecution) {
+            await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+              status: ReplayStatus.FAILED,
+              errorMessage: classification.errorMessage,
+              completedAt: new Date(),
+            });
+          }
+
           await this.dlqService.moveToDlq({
             notificationId,
             userId: payload.userId,
@@ -396,6 +427,14 @@ export class NotificationConsumer {
       // 3. Max attempts exhausted -> Move directly to DLQ & commit Kafka offset
       if (currentAttempt >= env.retryMaxAttempts && this.dlqService) {
         try {
+          if (replayExecution) {
+            await this.replayExecutionRepository.updateStatus(replayExecution.id, {
+              status: ReplayStatus.FAILED,
+              errorMessage: `Max delivery attempts exhausted (${currentAttempt}/${env.retryMaxAttempts})`,
+              completedAt: new Date(),
+            });
+          }
+
           await this.dlqService.moveToDlq({
             notificationId,
             userId: payload.userId,

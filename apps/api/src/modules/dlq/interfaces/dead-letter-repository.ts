@@ -12,5 +12,6 @@ export interface CreateDeadLetterData {
 export interface DeadLetterRepository {
   createDeadLetter(data: CreateDeadLetterData): Promise<NotificationDeadLetter>;
   findDeadLetterByNotificationId(notificationId: string): Promise<NotificationDeadLetter | null>;
+  resolveDeadLetter(notificationId: string, resolvedBy?: string): Promise<NotificationDeadLetter | null>;
   countDeadLetters(): Promise<number>;
 }

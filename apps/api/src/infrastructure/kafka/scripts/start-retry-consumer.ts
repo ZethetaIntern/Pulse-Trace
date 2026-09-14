@@ -3,6 +3,7 @@ import { logger } from '../../logger';
 import { PrismaNotificationRepository } from '../../../modules/notifications/repositories/prisma-notification-repository';
 import { PrismaNotificationEventRepository } from '../../../modules/notifications/repositories/prisma-notification-event-repository';
 import { PrismaDeadLetterRepository } from '../../../modules/dlq/repositories/prisma-dead-letter-repository';
+import { PrismaReplayExecutionRepository } from '../../../modules/replay/repositories/prisma-replay-execution-repository';
 import { NotificationService } from '../../../modules/notifications/services/notification-service';
 import { notificationQueue } from '../../queue/notification-queue';
 import { RetryScheduler } from '../../../modules/retry/services/retry-scheduler';
@@ -15,6 +16,7 @@ async function main(): Promise<void> {
   const notificationRepo = new PrismaNotificationRepository(prisma);
   const eventRepo = new PrismaNotificationEventRepository(prisma);
   const deadLetterRepo = new PrismaDeadLetterRepository(prisma);
+  const replayExecutionRepo = new PrismaReplayExecutionRepository(prisma);
 
   const notificationService = new NotificationService(
     notificationRepo,
@@ -32,6 +34,8 @@ async function main(): Promise<void> {
       retryScheduler,
       dlqService,
       notificationRepository: notificationRepo,
+      replayExecutionRepository: replayExecutionRepo,
+      deadLetterRepository: deadLetterRepo,
     },
   );
 

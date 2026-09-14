@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   useNotification,
+  useDeadLetter,
   useReplayHistory,
   useReplayNotification,
   useTimeline,
@@ -17,7 +18,7 @@ import { ApiRequestError } from '../api/client';
 import { useNow, formatRelativeTimePrecise, formatDateTime } from '../lib/time';
 import type { TimelineEventResponse, NotificationStatus } from '../types';
 
-const REPLAYABLE_STATUSES: NotificationStatus[] = ['DELIVERED', 'FAILED', 'RETRY_PENDING', 'DLQ', 'SKIPPED'];
+const REPLAYABLE_STATUSES: NotificationStatus[] = ['DLQ'];
 const FAILURE_STATUSES: NotificationStatus[] = ['FAILED', 'RETRY_PENDING', 'DLQ'];
 
 function isReplayable(status: NotificationStatus): boolean {
@@ -102,8 +103,51 @@ function metadataNumber(metadata: Record<string, unknown> | undefined, key: stri
   return typeof value === 'number' ? value : undefined;
 }
 
+function DeadLetterCard({ notificationId, status }: { notificationId: string; status: NotificationStatus }) {
+  const { data: dlq, isLoading } = useDeadLetter(notificationId, status === 'DLQ');
+
+  if (status !== 'DLQ') return null;
+  if (isLoading) return <Card title="Dead-Letter Record" subtitle="Investigating DLQ metadata"><LoadingSkeleton rows={3} /></Card>;
+  if (!dlq) return null;
+
+  return (
+    <Card title="Dead-Letter Record (DLQ)" subtitle="Durable DLQ entry and error analysis">
+      <div className="space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status="DLQ" withDot />
+          {dlq.resolvedAt ? (
+            <span className="rounded-control bg-success-soft px-2 py-0.5 text-[11px] font-medium text-success-text">
+              Resolved ({formatDateTime(dlq.resolvedAt)}{dlq.resolvedBy ? ` by ${dlq.resolvedBy}` : ''})
+            </span>
+          ) : (
+            <span className="rounded-control bg-warning-soft px-2 py-0.5 text-[11px] font-medium text-warning-text">
+              Unresolved / Pending Replay
+            </span>
+          )}
+          <span className="text-[11px] text-ink-muted">
+            Failed attempts: {dlq.failedAttempts}
+          </span>
+        </div>
+
+        {dlq.lastErrorMessage && (
+          <p className="rounded-control border border-line bg-sidebar px-2.5 py-1.5 font-mono text-[11px] leading-relaxed text-ink-muted">
+            {dlq.lastErrorCode ? `[${dlq.lastErrorCode}] ` : ''}{dlq.lastErrorMessage}
+          </p>
+        )}
+
+        {dlq.errorDetails && Array.isArray(dlq.errorDetails) && dlq.errorDetails.length > 0 && (
+          <div className="pt-1">
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-wider text-ink-faint">Error Details History</p>
+            <JsonViewer data={dlq.errorDetails as unknown as Record<string, unknown>} label="Error Details" defaultExpanded={false} />
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 function FailureCard({ status, events }: { status: NotificationStatus; events?: TimelineEventResponse[] }) {
-  if (!isFailureStatus(status)) return null;
+  if (!isFailureStatus(status) || status === 'DLQ') return null;
 
   const failures = (events ?? []).filter((e) => e.event === 'DELIVERY_FAILED');
   const lastFailure = failures[failures.length - 1];
@@ -112,8 +156,8 @@ function FailureCard({ status, events }: { status: NotificationStatus; events?: 
   const maxAttempts = metadataNumber(lastFailure?.metadata, 'maxAttempts');
   const retryScheduled = (events ?? []).some((e) => e.event === 'RETRY_SCHEDULED');
 
-  const title = status === 'RETRY_PENDING' ? 'Retry pending' : status === 'DLQ' ? 'In dead-letter queue' : 'Delivery failed';
-  const subtitle = status === 'RETRY_PENDING' ? 'Delivery failed and a retry is scheduled.' : status === 'DLQ' ? 'This notification was moved to the dead-letter queue.' : 'This notification could not be delivered.';
+  const title = status === 'RETRY_PENDING' ? 'Retry pending' : 'Delivery failed';
+  const subtitle = status === 'RETRY_PENDING' ? 'Delivery failed and a retry is scheduled.' : 'This notification could not be delivered.';
 
   return (
     <Card title={title} subtitle={subtitle}>
@@ -139,7 +183,17 @@ function FailureCard({ status, events }: { status: NotificationStatus; events?: 
 
 // ─── Replay ──────────────────────────────────────────────────
 
-function ReplaySection({ notificationId, status, onReplayed }: { notificationId: string; status: NotificationStatus; onReplayed: () => void }) {
+function ReplaySection({
+  notificationId,
+  status,
+  hasActiveReplay,
+  onReplayed,
+}: {
+  notificationId: string;
+  status: NotificationStatus;
+  hasActiveReplay: boolean;
+  onReplayed: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const replayMutation = useReplayNotification(notificationId);
@@ -154,27 +208,32 @@ function ReplaySection({ notificationId, status, onReplayed }: { notificationId:
 
   return (
     <section id="replay-section" tabIndex={-1} aria-label="Replay notification" className="rounded-card border border-line bg-surface p-4 focus:outline-none">
-      <h3 className="text-section-title text-ink">Replay</h3>
+      <h3 className="text-section-title text-ink">Operator Replay</h3>
+      {hasActiveReplay && (
+        <p className="mt-2 rounded-control bg-warning-soft px-2.5 py-1.5 text-[12px] text-warning-text">
+          An active replay is currently in progress for this notification.
+        </p>
+      )}
       {replayMutation.isSuccess && replayMutation.data && (
         <p className="mt-2 rounded-control bg-success-soft px-2.5 py-1.5 text-[12px] text-success-text">
-          Replay started. New notification:{' '}
+          Replay requested. New notification:{' '}
           <Link to={`/notifications/${replayMutation.data.notificationId}`} className="font-mono underline hover:text-success-text">
             {replayMutation.data.notificationId.slice(0, 8)}…
           </Link>
         </p>
       )}
-      {!replayMutation.isSuccess && !open && (
+      {!hasActiveReplay && !replayMutation.isSuccess && !open && (
         <Button className="mt-2" size="sm" onClick={() => setOpen(true)}>Replay notification</Button>
       )}
-      {!replayMutation.isSuccess && open && (
+      {!hasActiveReplay && !replayMutation.isSuccess && open && (
         <div className="mt-2 space-y-2">
           <div>
             <label htmlFor="replay-reason" className="field-label">Reason (optional)</label>
-            <input id="replay-reason" type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Provider recovered" className="field-control mt-1 w-full" />
+            <input id="replay-reason" type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. SMTP server recovered" className="field-control mt-1 w-full" />
           </div>
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={submit} disabled={replayMutation.isPending}>
-              {replayMutation.isPending ? 'Replaying…' : 'Replay notification'}
+              {replayMutation.isPending ? 'Replaying…' : 'Submit Replay'}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => { setOpen(false); setReason(''); }} disabled={replayMutation.isPending}>
               Cancel
@@ -196,25 +255,42 @@ function ReplaySection({ notificationId, status, onReplayed }: { notificationId:
 function ReplayHistoryCard({ notificationId, now }: { notificationId: string; now: number }) {
   const { data: replays, isLoading } = useReplayHistory(notificationId);
 
-  if (isLoading) return <Card title="Replay history" subtitle="Attempts to re-deliver this notification"><LoadingSkeleton rows={2} /></Card>;
+  if (isLoading) return <Card title="Replay history" subtitle="Operator attempts to re-deliver this notification"><LoadingSkeleton rows={2} /></Card>;
   if (!replays || replays.length === 0) return null;
 
   return (
-    <Card title="Replay history" subtitle="Attempts to re-deliver this notification">
+    <Card title="Replay history" subtitle="Operator attempts to re-deliver this notification">
       <ul role="list" className="divide-y divide-line">
         {replays.map((r) => (
-          <li key={r.replayId} className="py-2 first:pt-0 last:pb-0">
+          <li key={r.replayId} className="py-2.5 first:pt-0 last:pb-0">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-[10px] text-ink-faint">
                 <time dateTime={r.createdAt} title={formatDateTime(r.createdAt)}>{formatRelativeTimePrecise(r.createdAt, now)}</time>
                 {r.triggeredBy && <span> · {r.triggeredBy}</span>}
               </span>
-              {r.newNotificationStatus ? <StatusBadge status={r.newNotificationStatus as NotificationStatus} size="sm" /> : <span className="text-[10px] text-ink-faint">No new notification</span>}
+              <div className="flex items-center gap-1.5">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                  r.status === 'COMPLETED' ? 'bg-success-soft text-success-text' :
+                  r.status === 'RUNNING' ? 'bg-primary-soft text-primary-text' :
+                  r.status === 'FAILED' ? 'bg-error-soft text-error-text' :
+                  'bg-elevated text-ink-muted'
+                }`}>
+                  {r.status}
+                </span>
+                {r.newNotificationStatus && (
+                  <StatusBadge status={r.newNotificationStatus as NotificationStatus} size="sm" />
+                )}
+              </div>
             </div>
-            {r.reason && <p className="mt-0.5 text-[12px] text-ink">{r.reason}</p>}
+            {r.reason && <p className="mt-1 text-[12px] text-ink">{r.reason}</p>}
+            {r.errorMessage && (
+              <p className="mt-1 rounded bg-error-soft px-2 py-1 font-mono text-[11px] text-error-text">
+                {r.errorMessage}
+              </p>
+            )}
             {r.newNotificationId && (
-              <Link to={`/notifications/${r.newNotificationId}`} className="mt-0.5 inline-flex items-center gap-1 font-mono text-[11px] text-primary transition-colors hover:underline">
-                View new notification <span aria-hidden="true">→</span>
+              <Link to={`/notifications/${r.newNotificationId}`} className="mt-1 inline-flex items-center gap-1 font-mono text-[11px] text-primary transition-colors hover:underline">
+                View replayed notification ({r.newNotificationId.slice(0, 8)}…) <span aria-hidden="true">→</span>
               </Link>
             )}
           </li>
@@ -269,6 +345,9 @@ export function NotificationDetailPage() {
 
   const { data, isLoading, isError, error, refetch } = useNotification(id);
   const { data: timelineEvents } = useTimeline(id);
+  const { data: replays } = useReplayHistory(id);
+
+  const hasActiveReplay = Boolean(replays?.some((r) => r.status === 'REQUESTED' || r.status === 'RUNNING'));
 
   const isNotFound = isError && error instanceof ApiRequestError && error.status === 404;
 
@@ -276,6 +355,7 @@ export function NotificationDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['notification', id] });
     queryClient.invalidateQueries({ queryKey: ['timeline', id] });
     queryClient.invalidateQueries({ queryKey: ['replays', id] });
+    queryClient.invalidateQueries({ queryKey: ['dead-letter', id] });
   };
 
   const focusReplay = () => {
@@ -373,12 +453,15 @@ export function NotificationDetailPage() {
             <JsonViewer data={data.payload} label="Payload JSON" defaultExpanded={Object.keys(data.payload).length > 0} />
           </div>
 
+          {/* Dead-Letter Record (DLQ) */}
+          <DeadLetterCard notificationId={id} status={data.status} />
+
           {/* Failure Information (conditional) */}
           <FailureCard status={data.status} events={timelineEvents} />
 
           {/* Replay Action + History */}
           <div className="space-y-4">
-            <ReplaySection notificationId={id} status={data.status} onReplayed={handleReplayed} />
+            <ReplaySection notificationId={id} status={data.status} hasActiveReplay={hasActiveReplay} onReplayed={handleReplayed} />
             <ReplayHistoryCard notificationId={id} now={now} />
           </div>
         </>

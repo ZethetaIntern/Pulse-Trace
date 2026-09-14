@@ -4,4 +4,5 @@
 export interface ReplayNotificationDto {
   notificationId: string;
   reason?: string;
+  operatorId?: string;
 }
